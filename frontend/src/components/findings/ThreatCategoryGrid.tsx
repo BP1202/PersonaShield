@@ -2,10 +2,10 @@ import React from "react";
 import { KeyRound, UserCheck, CreditCard, Building2, EyeOff } from "lucide-react";
 
 interface ThreatCategoryGridProps {
-  categories: Record<string, number>;
+  categories?: Record<string, number> | string[];
 }
 
-export const ThreatCategoryGrid: React.FC<ThreatCategoryGridProps> = ({ categories }) => {
+export const ThreatCategoryGrid: React.FC<ThreatCategoryGridProps> = ({ categories = {} }) => {
   const getCategoryMeta = (cat: string) => {
     switch (cat.toLowerCase()) {
       case "developer_secrets":
@@ -18,13 +18,22 @@ export const ThreatCategoryGrid: React.FC<ThreatCategoryGridProps> = ({ categori
       case "payment":
         return { label: "Financial Data", icon: CreditCard, color: "#F59E0B" };
       case "workplace":
+      case "workplace_security":
+      case "workplace & infra":
         return { label: "Workplace & Infra", icon: Building2, color: "#60A5FA" };
       default:
         return { label: "Personal Privacy", icon: EyeOff, color: "#EC4899" };
     }
   };
 
-  const entries = Object.entries(categories);
+  const normalizedCategories: Record<string, number> = Array.isArray(categories)
+    ? categories.reduce((acc, cat) => {
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    : (categories as Record<string, number>) || {};
+
+  const entries = Object.entries(normalizedCategories);
 
   if (entries.length === 0) {
     return (

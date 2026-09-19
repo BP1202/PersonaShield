@@ -1,20 +1,20 @@
 import { request } from "./client";
-import type { FindingsData, ExposureScoreData } from "../types/api";
+import type { DetectionSummaryData } from "../types/api";
 
-export async function detectExposure(scanId: string): Promise<FindingsData> {
-  return request<FindingsData>(`/scan/${scanId}/detect`, {
+export async function detectExposure(scanId: string): Promise<DetectionSummaryData> {
+  return request<DetectionSummaryData>(`/scan/${scanId}/detect`, {
     method: "POST",
   });
 }
 
-export async function getFindings(scanId: string): Promise<FindingsData> {
-  return request<FindingsData>(`/scan/${scanId}/findings`, {
+export async function getFindings(scanId: string): Promise<any[]> {
+  return request<any[]>(`/scan/${scanId}/findings`, {
     method: "GET",
   });
 }
 
-export async function getScore(scanId: string): Promise<ExposureScoreData> {
-  return request<ExposureScoreData>(`/scan/${scanId}/score`, {
+export async function getScore(scanId: string): Promise<any> {
+  return request<any>(`/scan/${scanId}/score`, {
     method: "GET",
   });
 }

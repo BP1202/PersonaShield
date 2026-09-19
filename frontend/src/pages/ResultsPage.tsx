@@ -1,58 +1,50 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ExposureScoreCard } from "../components/report/ExposureScoreCard";
+import { useQuery } from "@tanstack/react-query";
+import { getReport } from "../api/report";
+import { getEntities } from "../api/extraction";
+import { CyberSafetyReceiptCard } from "../components/report/CyberSafetyReceiptCard";
+import { DetectionCanvas, type VisualizationMode } from "../components/safeshare/DetectionCanvas";
+import { ExplainabilityPanel } from "../components/findings/ExplainabilityPanel";
 import { ThreatCategoryGrid } from "../components/findings/ThreatCategoryGrid";
-import { FindingCard } from "../components/findings/FindingCard";
 import { ExposureTimeline } from "../components/report/ExposureTimeline";
 import { Button } from "../components/common/Button";
-import { getReport } from "../api/report";
-import type { IntelligenceReportData } from "../types/api";
-import { ArrowRight, ShieldCheck, RefreshCw, AlertCircle } from "lucide-react";
+import { ShieldCheck, ArrowRight, RefreshCw, AlertCircle } from "lucide-react";
 
 export const ResultsPage: React.FC = () => {
   const { scanId } = useParams<{ scanId: string }>();
   const navigate = useNavigate();
+  const [visMode, setVisMode] = useState<VisualizationMode>("detection");
 
-  const [data, setData] = useState<IntelligenceReportData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["scan-report", scanId],
+    queryFn: () => getReport(scanId!),
+    enabled: !!scanId,
+  });
 
-  useEffect(() => {
-    if (!scanId) return;
+  const { data: entitiesData } = useQuery({
+    queryKey: ["scan-entities", scanId],
+    queryFn: () => getEntities(scanId!),
+    enabled: !!scanId,
+  });
 
-    const fetchResults = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const report = await getReport(scanId);
-        setData(report);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch scan results.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResults();
-  }, [scanId]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[450px] gap-4">
-        <div className="w-12 h-12 border-3 border-[#A855F7] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-[#94A3B8]">Loading Cyber Safety Receipt from database...</p>
+        <div className="w-12 h-12 border-3 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-[#8CA3B8]">Compiling authoritative Cyber Safety Receipt...</p>
       </div>
     );
   }
 
-  if (error || !data) {
+  if (isError || !data) {
     return (
       <div className="max-w-xl mx-auto py-12 text-center space-y-4">
         <div className="w-14 h-14 rounded-2xl bg-[#EF4444]/15 border border-[#EF4444]/30 text-[#EF4444] flex items-center justify-center mx-auto">
           <AlertCircle className="w-7 h-7" />
         </div>
-        <h2 className="text-xl font-bold text-white">Unable to Load Receipt</h2>
-        <p className="text-xs text-[#94A3B8]">{error || "No report found for this scan session."}</p>
+        <h2 className="text-xl font-bold text-white">Failed to Load Cyber Safety Receipt</h2>
+        <p className="text-xs text-[#8CA3B8]">{error?.message || "Report could not be retrieved."}</p>
         <div className="flex justify-center gap-3 pt-2">
           <Link to="/">
             <Button variant="secondary" size="md">
@@ -72,23 +64,46 @@ export const ResultsPage: React.FC = () => {
     );
   }
 
-  const { receipt, findings, exposure_chains, threat_category_breakdown } = data;
+  const receipt = data.receipt;
+  const findingsList = data.evidence_cards || (data as any).findings || [];
+  const chains = data.exposure_chains || [];
+  const categories = receipt?.threat_categories || (data as any).threat_category_breakdown || {};
+  const originalUrl = `/api/v1/scan/${scanId}/preview`;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 py-4">
-      {/* 1. Exposure Score Hero */}
-      <ExposureScoreCard receipt={receipt} />
+      {/* 1. Cyber Safety Receipt Hero Card */}
+      {receipt && (
+        <CyberSafetyReceiptCard receipt={receipt} evidenceCards={findingsList} />
+      )}
 
-      {/* 2. Primary CTA Banner -> Proceed to SafeShare */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-[#A855F7]/15 via-[#121A2E] to-[#14B8A6]/15 border border-[#A855F7]/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+      {/* 2. Interactive Detection Overlay on Canvas */}
+      {scanId && (
+        <DetectionCanvas
+          scanId={scanId}
+          originalImageUrl={originalUrl}
+          findings={findingsList}
+          entities={entitiesData || []}
+          activeMode={visMode}
+          onModeChange={setVisMode}
+        />
+      )}
+
+      {/* 3. Primary CTA Banner -> Proceed to SafeShare */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-[#7C3AED]/20 via-[#0F172A] to-[#10B981]/20 border border-[#7C3AED]/40 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#A855F7]/20 border border-[#A855F7]/40 flex items-center justify-center text-[#A855F7] shrink-0">
-            <ShieldCheck className="w-6 h-6" />
+          <div className="w-14 h-14 rounded-2xl bg-[#10B981]/15 border border-[#10B981]/40 flex items-center justify-center text-[#10B981] shrink-0 shadow-lg shadow-[#10B981]/10">
+            <ShieldCheck className="w-7 h-7" />
           </div>
           <div>
-            <h4 className="text-base font-bold text-white">Generate SafeShare Redacted Version</h4>
-            <p className="text-xs text-[#94A3B8]">
-              Sanitize all {receipt.total_findings} exposed leaks automatically with Gaussian blur, pixelation, or blackout before sharing.
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="text-base font-bold text-white">Generate SafeShare Redacted Version</h4>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30 text-[10px] font-bold uppercase tracking-wider">
+                100% EXIF Purge
+              </span>
+            </div>
+            <p className="text-xs text-[#8CA3B8]">
+              Sanitize all {receipt?.total_findings ?? findingsList.length} exposed leaks automatically with Gaussian blur, pixelation, or blackout before sharing.
             </p>
           </div>
         </div>
@@ -104,43 +119,22 @@ export const ResultsPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* 3. Threat Categories Grid */}
+      {/* 4. AI Findings & Explainability Playbook */}
+      <ExplainabilityPanel findings={findingsList} />
+
+      {/* 5. Threat Categories Breakdown Grid */}
       <div className="space-y-3">
         <h3 className="text-base font-semibold text-white">Threat Category Breakdown</h3>
-        <ThreatCategoryGrid categories={threat_category_breakdown || {}} />
+        <ThreatCategoryGrid categories={categories} />
       </div>
 
-      {/* 4. Detected Findings Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-white">Detected Findings & Evidence</h3>
-            <p className="text-xs text-[#94A3B8]">
-              Deterministic findings with masked snippets, explainability reasons, and remediation playbooks
-            </p>
-          </div>
-          <span className="text-xs font-mono text-[#14B8A6] px-2.5 py-1 rounded-full bg-[#14B8A6]/10 border border-[#14B8A6]/30">
-            {findings.length} findings
-          </span>
+      {/* 6. Multi-Step Exposure Attack Chains */}
+      {chains.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-base font-semibold text-white">Multi-Step Attack Vectors</h3>
+          <ExposureTimeline chains={chains} />
         </div>
-
-        {findings.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-[#121A2E] border border-[#1E293B] text-center space-y-2">
-            <ShieldCheck className="w-8 h-8 text-[#22C55E] mx-auto" />
-            <div className="text-sm font-semibold text-white">Zero Leaks Detected</div>
-            <p className="text-xs text-[#94A3B8]">This digital artifact passed all cybersecurity checks cleanly.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {findings.map((finding) => (
-              <FindingCard key={finding.id} finding={finding} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 5. 3-Step Exposure Chains */}
-      <ExposureTimeline chains={exposure_chains || {}} />
+      )}
     </div>
   );
 };

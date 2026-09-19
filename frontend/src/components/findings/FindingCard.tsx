@@ -1,17 +1,17 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronUp, ShieldAlert, Sparkles, CheckCircle, ShieldCheck } from "lucide-react";
 import { Badge } from "../common/Badge";
-import type { FindingItem } from "../../types/api";
+import type { EvidenceCardData } from "../../types/api";
 
 interface FindingCardProps {
-  finding: FindingItem;
+  finding: EvidenceCardData | any;
 }
 
 export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
   const [expanded, setExpanded] = useState(false);
 
   const getSeverityVariant = (sev: string) => {
-    switch (sev) {
+    switch (sev?.toUpperCase()) {
       case "CRITICAL":
         return "critical" as const;
       case "HIGH":
@@ -22,6 +22,16 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
         return "low" as const;
     }
   };
+
+  const maskedSnippet = finding.masked_value || finding.masked_evidence || "";
+  const recommendationText =
+    typeof finding.recommendation === "string"
+      ? finding.recommendation
+      : (finding.recommendation?.impact_summary || finding.recommendation?.title || "");
+  const playbookSteps: string[] =
+    finding.recommendation?.action_steps || finding.remediation_playbook?.steps || [];
+  const playbookAction: string =
+    finding.recommendation?.title || finding.remediation_playbook?.action || "";
 
   return (
     <div className="rounded-2xl bg-[#121A2E] border border-[#1E293B] hover:border-[#334155] transition-all overflow-hidden shadow-lg">
@@ -47,14 +57,14 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
               )}
             </div>
             <div className="text-xs font-mono text-[#14B8A6] mt-0.5 truncate">
-              {finding.masked_evidence}
+              {maskedSnippet}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <span className="hidden sm:inline-block text-xs font-mono text-[#64748B]">
-            Conf: {(finding.confidence * 100).toFixed(0)}%
+            Conf: {((finding.confidence || 0) * 100).toFixed(0)}%
           </span>
           <div className="p-1.5 rounded-lg bg-[#0B1020] border border-[#1E293B] text-[#94A3B8]">
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -72,7 +82,7 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
               <span>Masked Evidence Snippet</span>
             </div>
             <div className="p-3 rounded-xl bg-[#0B1020] border border-[#1E293B] font-mono text-[#14B8A6] text-xs">
-              {finding.masked_evidence}
+              {maskedSnippet}
             </div>
           </div>
 
@@ -84,7 +94,7 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
                 <span>Explainable Confidence Reasons</span>
               </div>
               <ul className="space-y-1 pl-1">
-                {finding.confidence_reasons.map((reason, idx) => (
+                {finding.confidence_reasons.map((reason: string, idx: number) => (
                   <li key={idx} className="text-[#E5E7EB] flex items-start gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#14B8A6] mt-1.5 shrink-0" />
                     <span>{reason}</span>
@@ -100,14 +110,18 @@ export const FindingCard: React.FC<FindingCardProps> = ({ finding }) => {
               <ShieldCheck className="w-3.5 h-3.5 text-[#22C55E]" />
               <span>Remediation Recommendation</span>
             </div>
-            <p className="text-[#E5E7EB] leading-relaxed mb-2">{finding.recommendation}</p>
+            {recommendationText && (
+              <p className="text-[#E5E7EB] leading-relaxed mb-2">{recommendationText}</p>
+            )}
 
-            {finding.remediation_playbook?.steps && (
+            {playbookSteps.length > 0 && (
               <div className="p-3 rounded-xl bg-[#121A2E] border border-[#1E293B] space-y-1">
-                <div className="font-semibold text-[11px] text-[#A855F7] mb-1">
-                  Action: {finding.remediation_playbook.action}
-                </div>
-                {finding.remediation_playbook.steps.map((step, idx) => (
+                {playbookAction && (
+                  <div className="font-semibold text-[11px] text-[#A855F7] mb-1">
+                    Action: {playbookAction}
+                  </div>
+                )}
+                {playbookSteps.map((step, idx) => (
                   <div key={idx} className="flex items-start gap-2 text-[#94A3B8] text-[11px]">
                     <CheckCircle className="w-3 h-3 text-[#14B8A6] mt-0.5 shrink-0" />
                     <span>{step}</span>

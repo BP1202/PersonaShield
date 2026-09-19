@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { DetectionCanvas, type VisualizationMode } from "../components/safeshare/DetectionCanvas";
 import { SafeShareComparison } from "../components/safeshare/SafeShareComparison";
-import { DownloadSafeShareCard } from "../components/safeshare/DownloadSafeShareCard";
-import { generateSafeShare, getSafeShare } from "../api/safeshare";
-import type { SafeShareResponseData } from "../types/api";
+import { SafeShareExportCard } from "../components/safeshare/SafeShareExportCard";
+import { generateSafeShare, getSafeShare, downloadSafeShare, triggerBlobDownload } from "../api/safeshare";
+import { getReport } from "../api/report";
+import { getEntities } from "../api/extraction";
+import type { SafeShareResponseData, IntelligenceReportData, EntityItem } from "../types/api";
 import { Button } from "../components/common/Button";
 import { ArrowLeft, AlertCircle, RefreshCw } from "lucide-react";
 
@@ -11,12 +14,15 @@ export const SafeSharePage: React.FC = () => {
   const { scanId } = useParams<{ scanId: string }>();
 
   const [safeShareData, setSafeShareData] = useState<SafeShareResponseData | null>(null);
-  const [activeMode, setActiveMode] = useState<"blur" | "pixelate" | "blackout">("blur");
+  const [reportData, setReportData] = useState<IntelligenceReportData | null>(null);
+  const [entitiesData, setEntitiesData] = useState<EntityItem[]>([]);
+  const [activeMode, setActiveMode] = useState<VisualizationMode>("detection");
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initial load: generate or retrieve existing
+  // Initial load
   useEffect(() => {
     if (!scanId) return;
 
@@ -24,12 +30,20 @@ export const SafeSharePage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        // Try getting existing first
+        // Load report and entities in parallel
+        const [rep, ents] = await Promise.allSettled([
+          getReport(scanId),
+          getEntities(scanId),
+        ]);
+
+        if (rep.status === "fulfilled") setReportData(rep.value);
+        if (ents.status === "fulfilled") setEntitiesData(ents.value);
+
+        // Try getting existing SafeShare, otherwise generate
         try {
           const existing = await getSafeShare(scanId);
           setSafeShareData(existing);
         } catch {
-          // If not yet generated, generate with default blur
           const generated = await generateSafeShare(scanId, {});
           setSafeShareData(generated);
         }
@@ -43,31 +57,46 @@ export const SafeSharePage: React.FC = () => {
     initSafeShare();
   }, [scanId]);
 
-  // Mode change handler (re-generate with chosen style)
-  const handleModeChange = async (newMode: "blur" | "pixelate" | "blackout") => {
+  // Mode change handler
+  const handleModeChange = async (newMode: VisualizationMode) => {
     if (!scanId || newMode === activeMode) return;
     setActiveMode(newMode);
-    setRegenerating(true);
-    setError(null);
 
+    // If switching to backend redaction mode, trigger generation with mode override
+    if (["blur", "pixelate", "blackout"].includes(newMode)) {
+      setRegenerating(true);
+      setError(null);
+      try {
+        const updated = await generateSafeShare(scanId, {
+          override_modes: { DEFAULT: newMode },
+        });
+        setSafeShareData(updated);
+      } catch (err: any) {
+        setError(err.message || `Failed to apply ${newMode} redaction.`);
+      } finally {
+        setRegenerating(false);
+      }
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!safeShareData?.redaction_id) return;
+    setDownloading(true);
     try {
-      // Apply chosen mode as universal override
-      const updated = await generateSafeShare(scanId, {
-        override_modes: { DEFAULT: newMode },
-      });
-      setSafeShareData(updated);
+      const blob = await downloadSafeShare(safeShareData.redaction_id);
+      triggerBlobDownload(blob, `SafeShare_${scanId?.slice(0, 8)}_sanitized.png`);
     } catch (err: any) {
-      setError(err.message || `Failed to apply ${newMode} redaction.`);
+      setError(err.message || "Download failed. Please try again.");
     } finally {
-      setRegenerating(false);
+      setDownloading(false);
     }
   };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[450px] gap-4">
-        <div className="w-12 h-12 border-3 border-[#14B8A6] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-[#94A3B8]">SafeShare Engine: Reconstructing sanitized canvas...</p>
+        <div className="w-12 h-12 border-3 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-[#8CA3B8]">SafeShare Engine: Reconstructing sanitized canvas...</p>
       </div>
     );
   }
@@ -79,7 +108,7 @@ export const SafeSharePage: React.FC = () => {
           <AlertCircle className="w-7 h-7" />
         </div>
         <h2 className="text-xl font-bold text-white">SafeShare Generation Failed</h2>
-        <p className="text-xs text-[#94A3B8]">{error}</p>
+        <p className="text-xs text-[#8CA3B8]">{error}</p>
         <div className="flex justify-center gap-3 pt-2">
           <Link to={`/results/${scanId}`}>
             <Button variant="secondary" size="md">
@@ -99,8 +128,19 @@ export const SafeSharePage: React.FC = () => {
     );
   }
 
+  const originalUrl = `/api/v1/scan/${scanId}/preview`;
+  const findingsList = reportData?.evidence_cards || [];
+  const findingsCount = findingsList.length > 0 ? findingsList.length : entitiesData.length;
+  const riskLevel = reportData?.receipt?.risk_level || "CRITICAL";
+  const detectedTypes = [
+    ...new Set([
+      ...findingsList.map((f) => f.finding_type?.replace(/_/g, " ")),
+      ...entitiesData.map((e) => e.entity_type?.replace(/_/g, " ")),
+    ]),
+  ].filter(Boolean);
+
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-4">
+    <div className="max-w-6xl mx-auto space-y-8 py-4">
       {/* Top navigation back */}
       <div className="flex items-center justify-between">
         <Link to={`/results/${scanId}`}>
@@ -108,24 +148,45 @@ export const SafeSharePage: React.FC = () => {
             Back to Cyber Safety Receipt
           </Button>
         </Link>
-        <div className="text-xs font-mono text-[#94A3B8]">
-          Scan ID: {scanId?.slice(0, 8)}...
+        <div className="text-xs font-mono text-[#8CA3B8]">
+          Scan ID: <span className="text-white">{scanId?.slice(0, 8)}...</span>
         </div>
       </div>
 
-      {/* SafeShare Comparison / Preview */}
-      {safeShareData && (
-        <SafeShareComparison
-          safeShareData={safeShareData}
+      {/* 1. Interactive Detection Canvas with Bounding Box Overlay & 5 Modes */}
+      {scanId && (
+        <DetectionCanvas
+          scanId={scanId}
+          originalImageUrl={originalUrl}
+          redactedImageUrl={safeShareData?.download_url}
+          findings={findingsList}
+          entities={entitiesData}
           activeMode={activeMode}
           onModeChange={handleModeChange}
           isRegenerating={regenerating}
         />
       )}
 
-      {/* Download Card */}
+      {/* 2. Cyber Safety Summary & Redaction Audit */}
       {safeShareData && (
-        <DownloadSafeShareCard redactionId={safeShareData.redaction_id} />
+        <SafeShareComparison
+          safeShareData={safeShareData}
+          activeMode={activeMode}
+          onModeChange={handleModeChange}
+          isRegenerating={regenerating}
+          findingsCount={findingsCount}
+          riskLevel={riskLevel}
+          detectedTypes={detectedTypes}
+        />
+      )}
+
+      {/* 3. SafeShare Multi-Channel Distribution Hub */}
+      {safeShareData && (
+        <SafeShareExportCard
+          safeShareData={safeShareData}
+          onDownload={handleDownload}
+          isDownloading={downloading}
+        />
       )}
     </div>
   );

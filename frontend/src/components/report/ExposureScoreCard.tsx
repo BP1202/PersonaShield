@@ -8,8 +8,15 @@ interface ExposureScoreCardProps {
 }
 
 export const ExposureScoreCard: React.FC<ExposureScoreCardProps> = ({ receipt }) => {
-  const { exposure_score, risk_level, total_findings, critical_count, high_count, safeshare_available } =
-    receipt;
+  const {
+    exposure_score,
+    risk_level,
+    total_findings,
+  } = receipt;
+
+  const criticalCount = receipt.critical_findings ?? receipt.critical_count ?? 0;
+  const highCount = receipt.high_findings ?? receipt.high_count ?? 0;
+  const safeShareReady = receipt.safeshare_ready ?? receipt.safeshare_available ?? false;
 
   const getRiskDetails = () => {
     switch (risk_level) {
@@ -86,7 +93,7 @@ export const ExposureScoreCard: React.FC<ExposureScoreCardProps> = ({ receipt })
                 <IconComponent className="w-3.5 h-3.5 mr-1" />
                 {risk_level} RISK
               </Badge>
-              {safeshare_available && (
+              {safeShareReady && (
                 <span className="text-xs font-semibold text-[#14B8A6] flex items-center gap-1 bg-[#14B8A6]/10 px-2.5 py-1 rounded-full border border-[#14B8A6]/30">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   SafeShare Ready
@@ -106,11 +113,11 @@ export const ExposureScoreCard: React.FC<ExposureScoreCardProps> = ({ receipt })
             <div className="text-[11px] text-[#94A3B8] font-medium">Total Leaks</div>
           </div>
           <div className="p-3.5 rounded-2xl bg-[#0B1020] border border-[#1E293B] text-center min-w-[90px]">
-            <div className="text-xl font-bold text-[#EF4444]">{critical_count}</div>
+            <div className="text-xl font-bold text-[#EF4444]">{criticalCount}</div>
             <div className="text-[11px] text-[#94A3B8] font-medium">Critical</div>
           </div>
           <div className="p-3.5 rounded-2xl bg-[#0B1020] border border-[#1E293B] text-center min-w-[90px]">
-            <div className="text-xl font-bold text-[#F97316]">{high_count}</div>
+            <div className="text-xl font-bold text-[#F97316]">{highCount}</div>
             <div className="text-[11px] text-[#94A3B8] font-medium">High Risk</div>
           </div>
         </div>

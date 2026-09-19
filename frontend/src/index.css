@@ -1,37 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --color-cyber-bg: #0B1020;
-  --color-cyber-surface: #121A2E;
-  --color-cyber-surface-hover: #1A243F;
+  --color-cyber-bg: #060816;
+  --color-cyber-surface: #0F172A;
+  --color-cyber-card: #162032;
+  --color-cyber-surface-hover: #1E293B;
   --color-cyber-border: #1E293B;
-  --color-cyber-primary: #A855F7;
-  --color-cyber-accent: #14B8A6;
-  --color-cyber-success: #22C55E;
+  --color-cyber-primary: #10B981;
+  --color-cyber-ai: #7C3AED;
+  --color-cyber-accent: #10B981;
+  --color-cyber-success: #10B981;
   --color-cyber-warning: #F59E0B;
   --color-cyber-danger: #EF4444;
-  --color-cyber-text: #E5E7EB;
-  --color-cyber-muted: #94A3B8;
+  --color-cyber-text: #E8EEF8;
+  --color-cyber-muted: #8CA3B8;
 }
 
 @theme {
-  --color-bg: #0B1020;
-  --color-surface: #121A2E;
-  --color-surface-hover: #1A243F;
+  --color-bg: #060816;
+  --color-surface: #0F172A;
+  --color-card: #162032;
+  --color-surface-hover: #1E293B;
   --color-border: #1E293B;
-  --color-primary: #A855F7;
-  --color-accent: #14B8A6;
-  --color-success: #22C55E;
+  --color-primary: #10B981;
+  --color-ai: #7C3AED;
+  --color-accent: #10B981;
+  --color-success: #10B981;
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
-  --color-text: #E5E7EB;
-  --color-muted: #94A3B8;
+  --color-text: #E8EEF8;
+  --color-muted: #8CA3B8;
 }
 
 body {
   margin: 0;
-  background-color: #0B1020;
-  color: #E5E7EB;
+  background-color: #060816;
+  color: #E8EEF8;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;

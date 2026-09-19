@@ -10,6 +10,7 @@ export interface PipelineStage {
   description: string;
   state: StageState;
   detail?: string;
+  badge?: string;
 }
 
 interface ProcessingTimelineProps {
@@ -18,18 +19,18 @@ interface ProcessingTimelineProps {
 
 export const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({ stages }) => {
   return (
-    <div className="w-full bg-[#121A2E] rounded-3xl p-6 sm:p-8 border border-[#1E293B] shadow-2xl relative overflow-hidden">
+    <div className="w-full bg-[#0F172A] rounded-3xl p-6 sm:p-8 border border-[#1E293B] shadow-2xl relative overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between pb-6 border-b border-[#1E293B] mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-white">Preventive Pipeline Analysis</h3>
-          <p className="text-xs text-[#94A3B8]">
-            Deterministic AI and regex extraction running in live sequence
+          <h3 className="text-lg font-semibold text-white">Live AI Analysis Pipeline</h3>
+          <p className="text-xs text-[#8CA3B8]">
+            Deterministic AI, OCR extraction, and regex detection running in live sequence
           </p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#0B1020] border border-[#1E293B] text-xs text-[#14B8A6]">
-          <span className="w-2 h-2 rounded-full bg-[#14B8A6] animate-ping" />
-          <span>Real API Pipeline</span>
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#060816] border border-[#1E293B] text-xs text-[#10B981]">
+          <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+          <span>Real API Engine</span>
         </div>
       </div>
 
@@ -41,17 +42,17 @@ export const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({ stages }
               {/* Status Icon */}
               <div className="shrink-0 mt-0.5">
                 {stage.state === "completed" && (
-                  <div className="w-10 h-10 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/40 flex items-center justify-center text-[#22C55E] shadow-lg shadow-[#22C55E]/10">
+                  <div className="w-10 h-10 rounded-xl bg-[#10B981]/15 border border-[#10B981]/40 flex items-center justify-center text-[#10B981] shadow-lg shadow-[#10B981]/10">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                 )}
                 {stage.state === "running" && (
-                  <div className="w-10 h-10 rounded-xl bg-[#A855F7]/15 border border-[#A855F7]/40 flex items-center justify-center text-[#A855F7] shadow-lg shadow-[#A855F7]/20">
+                  <div className="w-10 h-10 rounded-xl bg-[#7C3AED]/15 border border-[#7C3AED]/40 flex items-center justify-center text-[#7C3AED] shadow-lg shadow-[#7C3AED]/20">
                     <Loader2 className="w-5 h-5 animate-spin" />
                   </div>
                 )}
                 {stage.state === "pending" && (
-                  <div className="w-10 h-10 rounded-xl bg-[#0B1020] border border-[#1E293B] flex items-center justify-center text-[#64748B]">
+                  <div className="w-10 h-10 rounded-xl bg-[#060816] border border-[#1E293B] flex items-center justify-center text-[#64748B]">
                     <Circle className="w-4 h-4" />
                   </div>
                 )}
@@ -63,24 +64,29 @@ export const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({ stages }
               </div>
 
               {/* Stage Content */}
-              <div className="flex-1 min-w-0 bg-[#0B1020]/60 p-4 rounded-2xl border border-[#1E293B]">
+              <div className="flex-1 min-w-0 bg-[#060816]/70 p-4.5 rounded-2xl border border-[#1E293B]">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm text-white">{stage.name}</span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#121A2E] text-[#94A3B8] border border-[#1E293B]">
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#0F172A] text-[#8CA3B8] border border-[#1E293B]">
                       {stage.endpoint}
                     </span>
                   </div>
 
-                  {/* State badge */}
-                  <div>
+                  {/* State badge / timing */}
+                  <div className="flex items-center gap-2">
+                    {stage.badge && (
+                      <span className="text-[11px] font-mono font-semibold text-[#10B981] bg-[#10B981]/10 px-2.5 py-0.5 rounded-full border border-[#10B981]/30">
+                        {stage.badge}
+                      </span>
+                    )}
                     {stage.state === "completed" && (
-                      <span className="text-[11px] font-semibold text-[#22C55E] flex items-center gap-1">
+                      <span className="text-[11px] font-semibold text-[#10B981] flex items-center gap-1">
                         Completed
                       </span>
                     )}
                     {stage.state === "running" && (
-                      <span className="text-[11px] font-semibold text-[#A855F7] flex items-center gap-1">
+                      <span className="text-[11px] font-semibold text-[#7C3AED] flex items-center gap-1">
                         Running...
                       </span>
                     )}
@@ -93,11 +99,11 @@ export const ProcessingTimeline: React.FC<ProcessingTimelineProps> = ({ stages }
                   </div>
                 </div>
 
-                <p className="text-xs text-[#94A3B8]">{stage.description}</p>
+                <p className="text-xs text-[#8CA3B8]">{stage.description}</p>
 
                 {stage.detail && (
-                  <div className="mt-2.5 pt-2 border-t border-[#1E293B] text-xs font-mono text-[#14B8A6] flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#14B8A6]" />
+                  <div className="mt-2.5 pt-2 border-t border-[#1E293B] text-xs font-mono text-[#10B981] flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
                     <span>{stage.detail}</span>
                   </div>
                 )}

@@ -22,89 +22,95 @@ export interface ScanUploadData {
 
 export interface EntityItem {
   id: string;
+  category: string;
   entity_type: string;
   text_snippet: string;
   confidence: number;
   bbox: [number, number, number, number];
   page_number: number;
+  created_at: string;
 }
 
-export interface ExtractionData {
+export interface ExtractionSummaryData {
   scan_id: string;
   status: string;
+  total_characters: number;
+  total_tokens: number;
   total_entities: number;
-  entities: EntityItem[];
+  entities_by_category: Record<string, number>;
 }
 
-export interface FindingItem {
-  id: string;
-  scan_id?: string;
-  threat_category: string;
-  finding_type: string;
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
-  confidence: number;
-  masked_evidence: string;
-  attack_surface?: string;
-  exposure_vector?: string;
-  confidence_reasons?: string[];
-  recommendation: string;
-  remediation_playbook?: {
-    action: string;
-    steps: string[];
-  };
-  bounding_box?: [number, number, number, number];
-  created_at?: string;
-}
-
-export interface FindingsData {
-  scan_id: string;
-  total_findings: number;
-  findings: FindingItem[];
-  exposure_score: number;
-  risk_level: string;
-  category_breakdown: Record<string, number>;
-}
-
-export interface ExposureScoreData {
-  scan_id: string;
-  exposure_score: number;
-  risk_level: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "SAFE";
-  total_findings: number;
-  severity_counts: {
-    CRITICAL: number;
-    HIGH: number;
-    MEDIUM: number;
-    LOW: number;
-  };
-  compounding_risk_bonus: number;
-}
-
-export interface ExposureChainStep {
-  step: number;
+export interface RecommendationData {
   title: string;
-  description: string;
+  priority?: string;
+  impact_summary: string;
+  action_steps: string[];
+}
+
+export interface EvidenceCardData {
+  id: string;
+  finding_type: string;
+  category: string;
+  attack_surface: string;
+  exposure_vector: string;
+  severity: string;
+  confidence: number;
+  confidence_reasons: string[];
+  masked_value: string;
+  bbox: [number, number, number, number];
+  page_number: number;
+  recommendation: RecommendationData;
 }
 
 export interface CyberSafetyReceipt {
   scan_id: string;
   exposure_score: number;
-  risk_level: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "SAFE";
+  risk_level: string;
   total_findings: number;
-  critical_count: number;
-  high_count: number;
-  medium_count: number;
-  low_count: number;
-  threat_categories: string[];
-  safeshare_available: boolean;
+  files_scanned?: number;
+  critical_findings?: number;
+  high_findings?: number;
+  medium_findings?: number;
+  low_findings?: number;
+  critical_count?: number;
+  high_count?: number;
+  medium_count?: number;
+  low_count?: number;
+  safeshare_ready?: boolean;
+  safeshare_available?: boolean;
+  threat_categories: Record<string, number> | string[];
   generated_at: string;
 }
 
+export interface ExposureChainStep {
+  step_number: number;
+  stage: string;
+  description: string;
+}
+
+export interface ExposureChainData {
+  finding_type: string;
+  title: string;
+  steps: ExposureChainStep[];
+}
+
 export interface IntelligenceReportData {
+  report_id: string;
   scan_id: string;
   receipt: CyberSafetyReceipt;
-  findings: FindingItem[];
-  exposure_chains: Record<string, ExposureChainStep[]>;
-  threat_category_breakdown: Record<string, number>;
+  evidence_cards: EvidenceCardData[];
+  exposure_chains: ExposureChainData[];
+  safeshare_available: boolean;
+  safeshare_preview_cta?: string;
+}
+
+export interface DetectionSummaryData {
+  scan_id: string;
+  status: string;
+  total_findings: number;
+  exposure_score: number;
+  risk_level: string;
+  findings: any[];
 }
 
 export interface SafeShareRegionItem {
