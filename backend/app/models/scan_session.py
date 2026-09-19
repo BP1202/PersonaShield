@@ -1,12 +1,16 @@
-import enum
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, DateTime, Enum, String
+from typing import TYPE_CHECKING, Optional
+from sqlalchemy import CHAR, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import TypeDecorator, CHAR
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
+from backend.app.core.constants import ScanSessionStatus
 from backend.app.core.database import Base
+
+if TYPE_CHECKING:
+    from backend.app.models.scan_file import ScanFile
 
 
 # Universal UUID Type that works seamlessly on PostgreSQL (native UUID) and SQLite/other backends
@@ -39,17 +43,10 @@ class GUID(TypeDecorator):
         return uuid.UUID(value)
 
 
-class ScanSessionStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-
-
 class ScanSession(Base):
     """
-    ScanSession database model representing an active or completed security scan session.
-    Adheres strictly to AGENTS.md rules: UUID primary key, UTC timestamps, parameterization.
+    ScanSession database model representing workflow and lifecycle state.
+    File artifact metadata is stored separately in ScanFile.
     """
 
     __tablename__ = "scan_sessions"
@@ -74,33 +71,6 @@ class ScanSession(Base):
         index=True,
     )
 
-    file_id: Mapped[uuid.UUID] = mapped_column(
-        GUID(),
-        default=uuid.uuid4,
-        nullable=False,
-        index=True,
-    )
-
-    stored_filename: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
-
-    original_filename: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
-
-    mime_type: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-
-    file_size_bytes: Mapped[int] = mapped_column(
-        BigInteger,
-        nullable=False,
-    )
-
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -112,4 +82,12 @@ class ScanSession(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    file: Mapped[Optional["ScanFile"]] = relationship(
+        "ScanFile",
+        back_populates="scan_session",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )

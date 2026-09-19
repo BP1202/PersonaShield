@@ -1,29 +1,41 @@
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
-from backend.app.models.scan_session import ScanSessionStatus
+from backend.app.core.constants import ScanSessionStatus
 
 
-class ScanCreateResponse(BaseModel):
-    """Response returned upon successful creation of a scan session."""
+class ScanFileData(BaseModel):
+    """File metadata associated with a scan session."""
     model_config = ConfigDict(from_attributes=True)
 
-    scan_id: uuid.UUID = Field(description="Unique identifier for the scan session")
-    status: ScanSessionStatus = Field(description="Initial status of the scan session")
-    file_id: uuid.UUID = Field(description="Unique identifier of the uploaded file artifact")
-    original_filename: str = Field(description="Sanitized name of the uploaded file")
-    file_size_bytes: int = Field(description="Size of the uploaded file in bytes")
+    file_id: uuid.UUID = Field(description="Unique identifier of the stored file artifact")
+    stored_filename: str = Field(description="UUID-based filename on disk")
+    display_filename: str = Field(description="Sanitized non-PII display filename")
+    mime_type: str = Field(description="Validated MIME type")
+    file_size_bytes: int = Field(description="Size in bytes")
+    sha256_hash: str = Field(description="SHA-256 cryptographic integrity digest")
+    created_at: datetime = Field(description="Upload timestamp in UTC")
+
+
+class ScanCreateResponseData(BaseModel):
+    """Data returned upon successful scan creation."""
+    model_config = ConfigDict(from_attributes=True)
+
+    scan_id: uuid.UUID = Field(description="Unique scan session ID")
+    status: ScanSessionStatus = Field(description="Current status of the scan")
+    file_id: uuid.UUID = Field(description="Associated file artifact ID")
+    display_filename: str = Field(description="Sanitized display filename")
+    file_size_bytes: int = Field(description="Size in bytes")
+    sha256_hash: str = Field(description="SHA-256 cryptographic fingerprint")
     created_at: datetime = Field(description="Creation timestamp in UTC")
 
 
-class ScanStatusResponse(BaseModel):
-    """Response returned when querying scan session status."""
+class ScanStatusResponseData(BaseModel):
+    """Data returned when querying scan status."""
     model_config = ConfigDict(from_attributes=True)
 
-    scan_id: uuid.UUID = Field(description="Unique identifier for the scan session")
+    scan_id: uuid.UUID = Field(description="Unique scan session ID")
     status: ScanSessionStatus = Field(description="Current status of the scan session")
-    original_filename: str = Field(description="Sanitized name of the uploaded file")
-    mime_type: str = Field(description="Validated MIME type")
-    file_size_bytes: int = Field(description="Size of the uploaded file in bytes")
     created_at: datetime = Field(description="Creation timestamp in UTC")
     updated_at: datetime = Field(description="Last status update timestamp in UTC")
+    file: ScanFileData = Field(description="Associated file metadata")

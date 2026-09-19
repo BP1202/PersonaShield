@@ -17,7 +17,6 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         client_request_id = request.headers.get("X-Request-ID")
         if client_request_id:
             try:
-                # Validate format if provided by client
                 validated_uuid = str(uuid.UUID(client_request_id))
                 request_id = validated_uuid
             except ValueError:
@@ -28,6 +27,21 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         response: Response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Injects defensive security headers onto every HTTP response.
+    Protects against MIME sniffing, clickjacking, referrer leakage, and browser API misuse.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         return response
 
 

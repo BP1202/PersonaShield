@@ -1,10 +1,23 @@
-from backend.app.schemas.health import HealthResponse
-from backend.app.schemas.scan import ScanCreateResponse, ScanStatusResponse
-from backend.app.schemas.error import ErrorResponse
+from backend.app.schemas.health import HealthData
+from backend.app.schemas.scan import (
+    ScanCreateResponseData,
+    ScanFileData,
+    ScanStatusResponseData,
+)
+from backend.app.schemas.response import (
+    APIErrorDetail,
+    APIResponse,
+    error_response,
+    success_response,
+)
 
 __all__ = [
-    "HealthResponse",
-    "ScanCreateResponse",
-    "ScanStatusResponse",
-    "ErrorResponse",
+    "HealthData",
+    "ScanFileData",
+    "ScanCreateResponseData",
+    "ScanStatusResponseData",
+    "APIResponse",
+    "APIErrorDetail",
+    "success_response",
+    "error_response",
 ]

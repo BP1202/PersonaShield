@@ -19,12 +19,16 @@ async def test_create_scan_valid_png(client: AsyncClient):
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 201
 
-    data = response.json()
+    body = response.json()
+    assert body["success"] is True
+    data = body["data"]
+
     assert "scan_id" in data
     assert data["status"] == "PENDING"
     assert "file_id" in data
-    assert data["original_filename"] == "screenshot.png"
+    assert data["display_filename"] == "screenshot.png"
     assert data["file_size_bytes"] == len(VALID_PNG_BYTES)
+    assert len(data["sha256_hash"]) == 64
     assert "x-request-id" in response.headers
 
 
@@ -35,8 +39,11 @@ async def test_create_scan_valid_pdf(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 201
-    data = response.json()
-    assert data["status"] == "PENDING"
+
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["status"] == "PENDING"
+    assert len(body["data"]["sha256_hash"]) == 64
 
 
 @pytest.mark.asyncio
@@ -46,10 +53,11 @@ async def test_reject_executable_upload(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 400
-    data = response.json()
-    assert "detail" in data
-    assert "error_code" in data
-    assert "request_id" in data
+
+    body = response.json()
+    assert body["success"] is False
+    assert "error" in body
+    assert body["error"]["code"] == "DANGEROUS_FILENAME"
 
 
 @pytest.mark.asyncio
@@ -59,7 +67,10 @@ async def test_reject_double_extension(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 400
-    assert "double extension" in response.json()["detail"].lower()
+
+    body = response.json()
+    assert body["success"] is False
+    assert "double extension" in body["error"]["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -69,7 +80,10 @@ async def test_reject_hidden_file(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 400
-    assert "hidden" in response.json()["detail"].lower()
+
+    body = response.json()
+    assert body["success"] is False
+    assert "hidden" in body["error"]["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -81,7 +95,10 @@ async def test_reject_magic_signature_spoof(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 400
-    assert "signature" in response.json()["detail"].lower()
+
+    body = response.json()
+    assert body["success"] is False
+    assert "signature" in body["error"]["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -91,6 +108,7 @@ async def test_reject_empty_file(client: AsyncClient):
     }
     response = await client.post("/api/v1/scan", files=files)
     assert response.status_code == 400
+    assert response.json()["success"] is False
 
 
 @pytest.mark.asyncio
@@ -101,17 +119,23 @@ async def test_get_scan_session_status(client: AsyncClient):
     }
     create_resp = await client.post("/api/v1/scan", files=files)
     assert create_resp.status_code == 201
-    scan_id = create_resp.json()["scan_id"]
+    scan_id = create_resp.json()["data"]["scan_id"]
 
     # Query status
     status_resp = await client.get(f"/api/v1/scan/{scan_id}")
     assert status_resp.status_code == 200
-    data = status_resp.json()
+
+    body = status_resp.json()
+    assert body["success"] is True
+    data = body["data"]
+
     assert data["scan_id"] == scan_id
     assert data["status"] == "PENDING"
-    assert data["original_filename"] == "photo.jpg"
-    assert data["mime_type"] == "image/jpeg"
-    assert data["file_size_bytes"] == len(VALID_JPEG_BYTES)
+    assert "file" in data
+    assert data["file"]["display_filename"] == "photo.jpg"
+    assert data["file"]["mime_type"] == "image/jpeg"
+    assert data["file"]["file_size_bytes"] == len(VALID_JPEG_BYTES)
+    assert len(data["file"]["sha256_hash"]) == 64
 
 
 @pytest.mark.asyncio
@@ -119,11 +143,14 @@ async def test_get_scan_session_not_found(client: AsyncClient):
     random_uuid = str(uuid.uuid4())
     response = await client.get(f"/api/v1/scan/{random_uuid}")
     assert response.status_code == 404
-    data = response.json()
-    assert "not found" in data["detail"].lower()
+
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "RESOURCE_NOT_FOUND"
 
 
 @pytest.mark.asyncio
 async def test_get_scan_session_invalid_uuid(client: AsyncClient):
     response = await client.get("/api/v1/scan/invalid-uuid-string")
     assert response.status_code == 422
+    assert response.json()["success"] is False
