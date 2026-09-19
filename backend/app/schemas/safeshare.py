@@ -26,7 +26,10 @@ class SafeShareGenerateRequest(BaseModel):
     """Payload for generating SafeShare privacy-preserving sanitized artifact."""
     selected_finding_ids: Optional[List[uuid.UUID]] = Field(
         default=None,
-        description="Optional list of finding UUIDs to redact. If omitted or null, all detected findings with bounding coordinates are automatically redacted.",
+        description=(
+            "Optional list of finding UUIDs to redact. "
+            "If omitted or null, all detected findings with bounding coordinates are automatically redacted."
+        ),
     )
     custom_regions: Optional[List[CustomRedactionBox]] = Field(
         default=None,
@@ -34,7 +37,10 @@ class SafeShareGenerateRequest(BaseModel):
     )
     override_modes: Optional[Dict[str, str]] = Field(
         default=None,
-        description="Optional map of finding_type or finding_id to custom redaction style (blur, pixelate, blackout).",
+        description=(
+            "Optional map of finding_type or finding_id to custom redaction style "
+            "(blur, pixelate, blackout)."
+        ),
     )
     blur_intensity: Optional[int] = Field(
         default=25,
@@ -46,8 +52,8 @@ class SafeShareGenerateRequest(BaseModel):
 
 class SafeShareRegionItem(BaseModel):
     """Record of an applied redaction region on the canvas."""
-    source: str = Field(description="Region source: finding or custom")
-    finding_id: Optional[uuid.UUID] = Field(default=None, description="Linked finding UUID if source=finding")
+    source: str = Field(description="Region source: finding, custom, or merged")
+    finding_id: Optional[str] = Field(default=None, description="Linked finding UUID if source=finding")
     finding_type: str = Field(description="Finding type identifier or USER_CUSTOM_SELECTION")
     bbox: List[int] = Field(description="Bounding box [x1, y1, x2, y2]")
     mode: str = Field(description="Redaction mode applied: blur, pixelate, blackout, partial_blur")
@@ -56,18 +62,43 @@ class SafeShareRegionItem(BaseModel):
 
 
 class SafeShareResponseData(BaseModel):
-    """Authoritative response metadata for a SafeShare sanitized artifact."""
+    """
+    Public API response for a SafeShare sanitized artifact.
+
+    Privacy policy:
+    - No original upload path, filename, or internal file ID is returned.
+    - No scan_session_id is returned.
+    - Only the redaction_id (opaque artifact reference) and download_url are exposed.
+    """
     model_config = ConfigDict(from_attributes=True)
 
-    redaction_id: uuid.UUID = Field(description="Unique SafeShare redaction identifier")
-    scan_id: uuid.UUID = Field(description="Parent scan session identifier")
-    original_file_id: uuid.UUID = Field(description="Original source file identifier")
-    output_filename: str = Field(description="UUID storage filename of the sanitized PNG")
-    download_url: str = Field(description="REST download endpoint URL for the sanitized PNG")
-    total_redacted_regions: int = Field(description="Total count of regions redacted on the artifact")
-    suggested_findings_count: int = Field(description="Total detected findings in the scan session")
-    applied_findings_count: int = Field(description="Number of detected findings redacted")
-    custom_regions_count: int = Field(description="Number of user-drawn custom regions redacted")
-    redacted_regions: List[Dict[str, Any]] = Field(description="List of all applied redaction boxes")
-    metadata_removed: bool = Field(default=True, description="Whether EXIF and camera metadata were stripped")
-    created_at: datetime = Field(description="Sanitized artifact generation timestamp in UTC")
+    redaction_id: uuid.UUID = Field(
+        description="Opaque SafeShare artifact identifier. Use to download the sanitized PNG."
+    )
+    download_url: str = Field(
+        description="REST endpoint to stream the sanitized PNG. Never exposes the original upload."
+    )
+    total_redacted_regions: int = Field(
+        description="Total count of regions redacted on the artifact after IoU merge."
+    )
+    applied_findings_count: int = Field(
+        description="Number of detected findings that contributed redaction regions."
+    )
+    custom_regions_count: int = Field(
+        description="Number of user-drawn custom regions applied."
+    )
+    metadata_removed: bool = Field(
+        description="True if all EXIF/GPS/camera metadata was stripped from the sanitized output."
+    )
+    output_sha256: Optional[str] = Field(
+        default=None,
+        description="SHA-256 fingerprint of the sanitized PNG artifact for tamper detection.",
+    )
+    redacted_regions: Optional[List[SafeShareRegionItem]] = Field(
+        default=None,
+        description="Detail of each applied redaction region.",
+    )
+    created_at: Optional[datetime] = Field(
+        default=None,
+        description="UTC timestamp of artifact creation.",
+    )

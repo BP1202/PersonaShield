@@ -96,6 +96,13 @@ class ScanRedaction(Base):
         default=True,
     )
 
+    output_sha256: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=False,
+        comment="SHA-256 fingerprint of the sanitized SafeShare PNG artifact for tamper detection.",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
