@@ -52,6 +52,14 @@ class Settings(BaseSettings):
         ".webp",
     ]
 
+    # Artifact Retention Policy (Hours) — Privacy by Design
+    UPLOAD_RETENTION_HOURS: int = 24
+    OCR_RETENTION_HOURS: int = 24
+    SAFESHARE_RETENTION_HOURS: int = 24
+
+    # Request Body Size Limit (Middleware)
+    MAX_REQUEST_BODY_BYTES: int = 15 * 1024 * 1024  # 15 MB
+
     @property
     def async_database_url(self) -> str:
         """Dynamically computes the async database connection URL from environment variables."""
