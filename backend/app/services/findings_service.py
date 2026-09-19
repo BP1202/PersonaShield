@@ -72,8 +72,11 @@ class FindingsService:
                 entity_id=pf.entity_id,
                 finding_type=pf.finding_type,
                 category=pf.category,
+                attack_surface=pf.attack_surface,
+                exposure_vector=pf.exposure_vector,
                 severity=pf.severity,
                 confidence=pf.confidence,
+                confidence_reasons=pf.confidence_reasons,
                 evidence=pf.evidence,
                 recommendation=pf.recommendation,
             )
