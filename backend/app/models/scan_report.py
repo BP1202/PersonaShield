@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
-from sqlalchemy import CHAR, DateTime, Float, ForeignKey, String, Text
+from typing import TYPE_CHECKING, Any, Dict, Optional
+from sqlalchemy import Boolean, CHAR, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, TypeDecorator
@@ -10,7 +10,6 @@ from backend.app.core.database import Base
 
 if TYPE_CHECKING:
     from backend.app.models.scan_session import ScanSession
-    from backend.app.models.scan_entity import ScanEntity
 
 
 class GUID(TypeDecorator):
@@ -49,12 +48,12 @@ class SafeJSON(TypeDecorator):
         return dialect.type_descriptor(JSON())
 
 
-class ScanFinding(Base):
+class ScanReport(Base):
     """
-    Persisted cybersecurity risk finding.
-    Represents an evidence-backed security exposure evaluated by the Exposure Detection Engine.
+    Persisted cybersecurity intelligence report snapshot.
+    Immutable snapshot presented to users as the authoritative Cyber Safety Receipt.
     """
-    __tablename__ = "scan_findings"
+    __tablename__ = "scan_reports"
 
     id: Mapped[uuid.UUID] = mapped_column(
         GUID,
@@ -66,68 +65,48 @@ class ScanFinding(Base):
     scan_session_id: Mapped[uuid.UUID] = mapped_column(
         GUID,
         ForeignKey("scan_sessions.id", ondelete="CASCADE"),
+        unique=True,
         nullable=False,
         index=True,
     )
 
-    entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        GUID,
-        ForeignKey("scan_entities.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    finding_type: Mapped[str] = mapped_column(
-        String(80),
+    exposure_score: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
-        index=True,
+        default=0,
     )
 
-    category: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        index=True,
-    )
-
-    attack_surface: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="Developer",
-        index=True,
-    )
-
-    exposure_vector: Mapped[str] = mapped_column(
-        String(80),
-        nullable=False,
-        default="Credential Leakage",
-        index=True,
-    )
-
-    severity: Mapped[str] = mapped_column(
+    risk_level: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        index=True,
+        default="SAFE",
     )
 
-    confidence: Mapped[float] = mapped_column(
-        Float,
+    total_findings: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
-        default=1.0,
+        default=0,
     )
 
-    confidence_reasons: Mapped[List[str]] = mapped_column(
-        SafeJSON,
-        nullable=False,
-        default=list,
-    )
-
-    evidence: Mapped[Dict[str, Any]] = mapped_column(
+    severity_distribution: Mapped[Dict[str, Any]] = mapped_column(
         SafeJSON,
         nullable=False,
         default=dict,
     )
 
-    recommendation: Mapped[Dict[str, Any]] = mapped_column(
+    threat_categories: Mapped[Dict[str, Any]] = mapped_column(
+        SafeJSON,
+        nullable=False,
+        default=dict,
+    )
+
+    safeshare_available: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    report_data: Mapped[Dict[str, Any]] = mapped_column(
         SafeJSON,
         nullable=False,
         default=dict,
@@ -142,10 +121,5 @@ class ScanFinding(Base):
     # Relationships
     scan_session: Mapped["ScanSession"] = relationship(
         "ScanSession",
-        back_populates="findings",
-    )
-
-    entity: Mapped[Optional["ScanEntity"]] = relationship(
-        "ScanEntity",
-        lazy="selectin",
+        back_populates="report",
     )
