@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from backend.app.api.deps import get_db
 from backend.app.core.config import settings
 from backend.app.core.database import Base
+import backend.app.models  # Ensure all models are registered with Base.metadata
 from backend.app.main import app
 from backend.app.services.storage_service import storage_service
 

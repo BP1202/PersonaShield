@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import CHAR, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,6 +11,10 @@ from backend.app.core.database import Base
 
 if TYPE_CHECKING:
     from backend.app.models.scan_file import ScanFile
+    from backend.app.models.scan_ocr_result import ScanOcrResult
+    from backend.app.models.scan_entity import ScanEntity
+    from backend.app.models.scan_finding import ScanFinding
+    from backend.app.models.scan_report import ScanReport
 
 
 # Universal UUID Type that works seamlessly on PostgreSQL (native UUID) and SQLite/other backends
@@ -91,3 +95,35 @@ class ScanSession(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    ocr_result: Mapped[Optional["ScanOcrResult"]] = relationship(
+        "ScanOcrResult",
+        back_populates="scan_session",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    entities: Mapped[List["ScanEntity"]] = relationship(
+        "ScanEntity",
+        back_populates="scan_session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    findings: Mapped[List["ScanFinding"]] = relationship(
+        "ScanFinding",
+        back_populates="scan_session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    report: Mapped[Optional["ScanReport"]] = relationship(
+        "ScanReport",
+        back_populates="scan_session",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
