@@ -10,6 +10,7 @@ from backend.app.redaction.blur import (
     apply_gaussian_blur,
     apply_partial_blur,
     apply_pixelation,
+    merge_overlapping_bboxes_iou,
 )
 from backend.app.redaction.metadata import strip_exif_metadata
 
@@ -120,13 +121,15 @@ class RedactionEngine:
         """
         Executes full SafeShare redaction pipeline:
         1. Decodes image into full-color matrix.
-        2. Applies bounding box redactions for eligible findings.
-        3. Applies user-defined custom rectangular boxes.
-        4. Strips all EXIF metadata.
-        5. Returns sanitized PNG bytes and list of applied regions.
+        2. Collects all pending redaction regions (findings + custom).
+        3. Merges overlapping regions via IoU threshold (prevents double-blur artifacts).
+        4. Applies each merged region once.
+        5. Strips ALL metadata by reconstructing image from raw pixels.
+        6. Returns sanitized PNG bytes and list of applied regions.
         """
         img = decode_image_bytes(image_bytes)
-        applied_regions: List[Dict[str, Any]] = []
+        h, w = img.shape[:2]
+        pending_regions: List[Dict[str, Any]] = []
         findings = findings or []
 
         # Convert selected_finding_ids to set of strings for O(1) lookup
@@ -136,12 +139,11 @@ class RedactionEngine:
             else None
         )
 
-        # 1. Redact Detected Findings
+        # 1. Collect Detected Finding Regions
         for finding in findings:
             finding_id = str(finding.get("id", ""))
             finding_type = str(finding.get("finding_type", "UNKNOWN"))
 
-            # If user specified a subset of findings, filter
             if selected_ids_set is not None and finding_id not in selected_ids_set:
                 continue
 
@@ -152,9 +154,8 @@ class RedactionEngine:
                 continue
 
             mode = self.determine_mode(finding_type, finding_id, override_modes)
-            img = self.apply_region(img, bbox, mode=mode, blur_kernel=blur_kernel)
 
-            applied_regions.append({
+            pending_regions.append({
                 "source": "finding",
                 "finding_id": finding_id,
                 "finding_type": finding_type,
@@ -163,7 +164,7 @@ class RedactionEngine:
                 "masked_value": evidence.get("masked_value", ""),
             })
 
-        # 2. Redact User Custom Rectangular Regions
+        # 2. Collect User Custom Rectangular Regions
         if custom_regions:
             for idx, custom_box in enumerate(custom_regions, start=1):
                 bbox = custom_box.get("bbox", [])
@@ -173,9 +174,7 @@ class RedactionEngine:
                 mode = custom_box.get("mode", "blur")
                 label = custom_box.get("label") or f"Custom Region #{idx}"
 
-                img = self.apply_region(img, bbox, mode=mode, blur_kernel=blur_kernel)
-
-                applied_regions.append({
+                pending_regions.append({
                     "source": "custom",
                     "finding_id": None,
                     "finding_type": "USER_CUSTOM_SELECTION",
@@ -184,11 +183,21 @@ class RedactionEngine:
                     "label": label,
                 })
 
-        # 3. Strip all EXIF metadata and output clean PNG bytes
+        # 3. IoU-based overlap merge — prevents layered blur artifacts
+        applied_regions = merge_overlapping_bboxes_iou(pending_regions, iou_threshold=0.20)
+
+        # 4. Apply each merged region once
+        for region in applied_regions:
+            bbox = region["bbox"]
+            mode = region["mode"]
+            img = self.apply_region(img, bbox, mode=mode, blur_kernel=blur_kernel)
+
+        # 5. Strip ALL metadata via image pixel reconstruction (Check 4)
         sanitized_bytes = strip_exif_metadata(img)
 
         logger.info(
             f"SafeShare sanitized image generated: {len(applied_regions)} regions applied "
+            f"(from {len(pending_regions)} pending → after IoU merge) "
             f"({len(sanitized_bytes)} bytes)",
             extra={"applied_regions_count": len(applied_regions)},
         )
@@ -197,3 +206,4 @@ class RedactionEngine:
 
 
 safeshare_engine = RedactionEngine()
+
