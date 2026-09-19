@@ -135,7 +135,6 @@ class TestExifStripping:
         stripped = strip_exif_metadata(png_bytes)
         with Image.open(io.BytesIO(stripped)) as result_img:
             assert result_img.size == (50, 40)
-            pixels = list(result_img.getdata())
-            assert all(p == (255, 0, 128) for p in pixels), (
+            assert result_img.tobytes() == (bytes([255, 0, 128]) * (50 * 40)), (
                 "Pixel data must be preserved exactly after metadata reconstruction"
             )

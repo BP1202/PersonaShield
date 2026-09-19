@@ -19,22 +19,21 @@ def strip_exif_metadata(image_input: Union[bytes, np.ndarray, Image.Image]) -> b
         rgb_array = cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB)
         pil_src = Image.fromarray(rgb_array)
         width, height = pil_src.size
-        pixel_data = list(pil_src.getdata())
+        raw_bytes = pil_src.tobytes()
     elif isinstance(image_input, bytes):
         with Image.open(io.BytesIO(image_input)) as raw:
             pil_src = raw.convert("RGB")
             width, height = pil_src.size
-            pixel_data = list(pil_src.getdata())
+            raw_bytes = pil_src.tobytes()
     elif isinstance(image_input, Image.Image):
         pil_src = image_input.convert("RGB")
         width, height = pil_src.size
-        pixel_data = list(pil_src.getdata())
+        raw_bytes = pil_src.tobytes()
     else:
         raise ValueError(f"Unsupported image input type: {type(image_input)}")
 
     # Recreate a completely fresh image with zero metadata inheritance
-    clean_image = Image.new("RGB", (width, height))
-    clean_image.putdata(pixel_data)
+    clean_image = Image.frombytes("RGB", (width, height), raw_bytes)
 
     # Encode to PNG — lossless, deterministic, no EXIF container
     output_buffer = io.BytesIO()
