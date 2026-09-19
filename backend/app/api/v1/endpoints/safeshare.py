@@ -92,7 +92,7 @@ download_router = APIRouter()
         "no caller-supplied scan_id is trusted. "
         "All EXIF and camera metadata is stripped. "
         "The response is served with Content-Disposition: attachment for safe download. "
-        "X-SafeShare-SHA256 header contains the SHA-256 integrity fingerprint for verification."
+        "Cache-Control: no-store, Pragma: no-cache, and Expires: 0 ensure privacy-preserving delivery."
     ),
     responses={
         200: {
@@ -109,8 +109,9 @@ async def download_safeshare_artifact(
     Check 6: redaction_id is validated against DB records.
     Ownership verified via scan_session_id relationship — no attacker-controlled scan_id.
     Streams only the sanitized artifact; original upload path is never exposed.
+    SHA-256 hash is verified and maintained internally in the database without leaking in headers.
     """
-    png_bytes, sha256_hash = await safeshare_service.get_redaction_artifact_bytes(
+    png_bytes, _ = await safeshare_service.get_redaction_artifact_bytes(
         db=db, redaction_id=redaction_id
     )
 
@@ -120,10 +121,8 @@ async def download_safeshare_artifact(
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store, no-cache, must-revalidate",
         "Pragma": "no-cache",
+        "Expires": "0",
     }
-
-    if sha256_hash:
-        headers["X-SafeShare-SHA256"] = sha256_hash
 
     return StreamingResponse(
         content=iter([png_bytes]),

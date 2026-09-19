@@ -57,38 +57,39 @@ class TestDownloadSecurity:
         assert resp.status_code == 404
 
     async def test_download_valid_redaction_streams_png(self, client: AsyncClient):
-        """Check 6: Valid redaction_id must stream PNG bytes with correct headers."""
+        """Check 6 & Priority 2: Valid redaction_id must stream PNG bytes with strict privacy headers."""
         _, redaction_id = await _upload_and_detect(client)
 
         resp = await client.get(f"/api/v1/redaction/{redaction_id}/download")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
         assert "attachment" in resp.headers.get("content-disposition", "")
-        assert resp.headers.get("cache-control") == "no-store, no-cache, must-revalidate"
+        cache_control = resp.headers.get("cache-control", "")
+        assert "no-store" in cache_control
+        assert "no-cache" in cache_control
+        assert resp.headers.get("pragma") == "no-cache"
+        assert resp.headers.get("expires") == "0"
+        assert resp.headers.get("x-content-type-options") == "nosniff"
 
-    async def test_download_returns_sha256_header(self, client: AsyncClient):
-        """Check 7: X-SafeShare-SHA256 header must be present and valid."""
+    async def test_download_does_not_leak_sha256_header(self, client: AsyncClient):
+        """Priority 1: X-SafeShare-SHA256 header must NOT be exposed in public download response."""
         _, redaction_id = await _upload_and_detect(client)
 
         resp = await client.get(f"/api/v1/redaction/{redaction_id}/download")
         assert resp.status_code == 200
-
-        sha256_header = resp.headers.get("x-safeshare-sha256", "")
-        assert len(sha256_header) == 64, "SHA-256 must be 64 hex characters"
-        assert all(c in "0123456789abcdef" for c in sha256_header)
-
-    async def test_downloaded_sha256_matches_content(self, client: AsyncClient):
-        """Check 7: SHA-256 header must match the actual downloaded file bytes."""
-        _, redaction_id = await _upload_and_detect(client)
-
-        resp = await client.get(f"/api/v1/redaction/{redaction_id}/download")
-        assert resp.status_code == 200
-
-        declared_hash = resp.headers.get("x-safeshare-sha256", "")
-        computed_hash = hashlib.sha256(resp.content).hexdigest()
-        assert declared_hash == computed_hash, (
-            "X-SafeShare-SHA256 header must match SHA-256 of downloaded body"
+        assert "x-safeshare-sha256" not in resp.headers, (
+            "SHA-256 header must not be exposed in public download response"
         )
+
+    async def test_download_privacy_cache_headers_strictly_enforced(self, client: AsyncClient):
+        """Priority 2: Cache-Control: no-store, Pragma: no-cache, Expires: 0 must be present."""
+        _, redaction_id = await _upload_and_detect(client)
+
+        resp = await client.get(f"/api/v1/redaction/{redaction_id}/download")
+        assert resp.status_code == 200
+        assert resp.headers.get("cache-control") == "no-store, no-cache, must-revalidate"
+        assert resp.headers.get("pragma") == "no-cache"
+        assert resp.headers.get("expires") == "0"
 
     async def test_response_does_not_leak_original_filename(self, client: AsyncClient):
         """Check 1: Metadata endpoint must not return original_file_id or output_filename."""
