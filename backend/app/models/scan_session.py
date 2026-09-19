@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from backend.app.models.scan_file import ScanFile
     from backend.app.models.scan_ocr_result import ScanOcrResult
     from backend.app.models.scan_entity import ScanEntity
+    from backend.app.models.scan_finding import ScanFinding
 
 
 # Universal UUID Type that works seamlessly on PostgreSQL (native UUID) and SQLite/other backends
@@ -108,3 +109,11 @@ class ScanSession(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    findings: Mapped[List["ScanFinding"]] = relationship(
+        "ScanFinding",
+        back_populates="scan_session",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
