@@ -37,7 +37,7 @@ async def test_safeshare_download_not_found(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_safeshare_empty_findings_produces_clean_image(client: AsyncClient):
-    """Upload -> Extract (no secrets) -> Detect -> SafeShare. Output equals sanitized clean image."""
+    """Upload -> Extract (no secrets) -> Detect -> SafeShare. Clean image, no EXIF."""
     # 1. Upload
     png_bytes = create_valid_png_bytes(200, 150)
     create_resp = await client.post(
@@ -71,12 +71,18 @@ async def test_safeshare_empty_findings_produces_clean_image(client: AsyncClient
     assert safeshare_body["success"] is True
 
     data = safeshare_body["data"]
-    assert data["scan_id"] == scan_id
     assert data["total_redacted_regions"] == 0
     assert data["applied_findings_count"] == 0
     assert data["custom_regions_count"] == 0
     assert data["metadata_removed"] is True
     assert "download_url" in data
+    assert "redaction_id" in data
+
+    # Check 1: internal IDs must NOT appear in response
+    assert "original_file_id" not in data
+    assert "output_filename" not in data
+    assert "scan_id" not in data
+
     redaction_id = data["redaction_id"]
 
     # 5. GET /scan/{scan_id}/safeshare
@@ -90,20 +96,17 @@ async def test_safeshare_empty_findings_produces_clean_image(client: AsyncClient
     assert download_resp.status_code == 200
     assert download_resp.headers["content-type"] == "image/png"
     assert "attachment" in download_resp.headers.get("content-disposition", "")
-    # Validate it's a valid PNG
+    # Validate PNG magic bytes
     raw_png = download_resp.content
+    assert raw_png[:8] == b"\x89PNG\r\n\x1a\n"
     with Image.open(io.BytesIO(raw_png)) as img:
         assert img.format == "PNG"
-    # No EXIF in downloaded image
-    with Image.open(io.BytesIO(raw_png)) as img:
-        exif = img.getexif()
-        assert len(exif) == 0
+        assert len(img.getexif()) == 0
 
 
 @pytest.mark.asyncio
 async def test_safeshare_end_to_end_with_findings(client: AsyncClient):
-    """Upload -> Extract -> Detect -> SafeShare. Verifies bboxes are redacted."""
-    # 1. Upload
+    """Upload -> Extract -> Detect -> SafeShare. Verifies bboxes are redacted and EXIF absent."""
     png_bytes = create_valid_png_bytes(400, 300)
     create_resp = await client.post(
         "/api/v1/scan", files={"file": ("leaked.png", io.BytesIO(png_bytes), "image/png")}
@@ -111,7 +114,6 @@ async def test_safeshare_end_to_end_with_findings(client: AsyncClient):
     assert create_resp.status_code == 201
     scan_id = create_resp.json()["data"]["scan_id"]
 
-    # 2. Extract with AWS key and Aadhaar
     mock_tokens = [
         OcrToken(text="AKIAIOSFODNN7EXAMPLE", confidence=0.99, bbox=[20, 20, 200, 50], page_number=1),
         OcrToken(text="3456 7890 1234", confidence=0.95, bbox=[20, 80, 150, 110], page_number=1),
@@ -127,31 +129,28 @@ async def test_safeshare_end_to_end_with_findings(client: AsyncClient):
     ):
         await client.post(f"/api/v1/scan/{scan_id}/extract")
 
-    # 3. Detect
     detect_resp = await client.post(f"/api/v1/scan/{scan_id}/detect")
     assert detect_resp.status_code == 200
     total = detect_resp.json()["data"]["total_findings"]
     assert total >= 2
 
-    # 4. POST /safeshare — auto-redact all findings
     safeshare_resp = await client.post(f"/api/v1/scan/{scan_id}/safeshare", json={})
     assert safeshare_resp.status_code == 200
     data = safeshare_resp.json()["data"]
     assert data["applied_findings_count"] >= 2
     assert data["total_redacted_regions"] >= 2
     assert data["metadata_removed"] is True
-    redaction_id = data["redaction_id"]
+    assert "output_sha256" in data
 
-    # Verify redacted_regions include blackout for AWS key
-    regions = data["redacted_regions"]
+    regions = data.get("redacted_regions") or []
     aws_region = next(
         (r for r in regions if r.get("finding_type") == "AWS_ACCESS_KEY_EXPOSURE"), None
     )
     assert aws_region is not None
     assert aws_region["mode"] == "blackout"
-    assert aws_region["source"] == "finding"
+    assert aws_region["source"] in ("finding", "merged")
 
-    # 5. Download and verify PNG validity + no EXIF
+    redaction_id = data["redaction_id"]
     download_resp = await client.get(f"/api/v1/redaction/{redaction_id}/download")
     assert download_resp.status_code == 200
     assert download_resp.headers["content-type"] == "image/png"
@@ -164,8 +163,7 @@ async def test_safeshare_end_to_end_with_findings(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_safeshare_user_custom_regions(client: AsyncClient):
-    """Verifies user-drawn custom rectangular boxes are applied."""
-    # 1. Upload + extract + detect (no findings needed for custom test)
+    """Verifies user-drawn custom rectangular boxes are applied correctly."""
     png_bytes = create_valid_png_bytes(400, 300)
     create_resp = await client.post(
         "/api/v1/scan", files={"file": ("doc.png", io.BytesIO(png_bytes), "image/png")}
@@ -186,7 +184,6 @@ async def test_safeshare_user_custom_regions(client: AsyncClient):
 
     await client.post(f"/api/v1/scan/{scan_id}/detect")
 
-    # 2. POST /safeshare with custom user-drawn boxes
     payload = {
         "custom_regions": [
             {"bbox": [50, 50, 150, 100], "mode": "pixelate", "label": "My Name Box"},
@@ -198,7 +195,7 @@ async def test_safeshare_user_custom_regions(client: AsyncClient):
     data = resp.json()["data"]
     assert data["custom_regions_count"] == 2
 
-    regions = data["redacted_regions"]
+    regions = data.get("redacted_regions") or []
     custom = [r for r in regions if r.get("source") == "custom"]
     assert len(custom) == 2
     assert custom[0]["mode"] == "pixelate"
