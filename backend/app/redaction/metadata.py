@@ -1,5 +1,5 @@
 import io
-from typing import Optional, Union
+from typing import Union
 import cv2
 import numpy as np
 from PIL import Image
@@ -7,38 +7,44 @@ from PIL import Image
 
 def strip_exif_metadata(image_input: Union[bytes, np.ndarray, Image.Image]) -> bytes:
     """
-    Strips all EXIF, GPS, device, camera, and maker metadata tags.
-    Returns clean, optimized PNG image bytes with zero privacy leakage.
+    Strips ALL metadata by recreating the image from raw pixel data only.
+    This removes: EXIF, GPS, ICC profiles, orientation flags, thumbnails,
+    MakerNotes, camera model, timestamps — only pixel RGB values are preserved.
+
+    Strategy (Check 4): Decode pixels → brand-new RGB Image.new() → PNG.
+    This is the safest approach: no metadata dictionary is ever copied.
     """
     if isinstance(image_input, np.ndarray):
-        # Image is an OpenCV BGR numpy array
+        # BGR OpenCV array → PIL RGB
         rgb_array = cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(rgb_array)
+        pil_src = Image.fromarray(rgb_array)
+        width, height = pil_src.size
+        pixel_data = list(pil_src.getdata())
     elif isinstance(image_input, bytes):
-        with Image.open(io.BytesIO(image_input)) as raw_pil:
-            # Recreate a fresh image buffer copying solely the pixel data
-            pil_image = Image.new("RGB", raw_pil.size)
-            pil_image.paste(raw_pil.convert("RGB"))
+        with Image.open(io.BytesIO(image_input)) as raw:
+            pil_src = raw.convert("RGB")
+            width, height = pil_src.size
+            pixel_data = list(pil_src.getdata())
     elif isinstance(image_input, Image.Image):
-        pil_image = Image.new("RGB", image_input.size)
-        pil_image.paste(image_input.convert("RGB"))
+        pil_src = image_input.convert("RGB")
+        width, height = pil_src.size
+        pixel_data = list(pil_src.getdata())
     else:
         raise ValueError(f"Unsupported image input type: {type(image_input)}")
 
-    # Save to PNG without any exif or info dictionary
+    # Recreate a completely fresh image with zero metadata inheritance
+    clean_image = Image.new("RGB", (width, height))
+    clean_image.putdata(pixel_data)
+
+    # Encode to PNG — lossless, deterministic, no EXIF container
     output_buffer = io.BytesIO()
-    pil_image.save(
-        output_buffer,
-        format="PNG",
-        optimize=True,
-        # Explicitly omit any exif, icc_profile, or comments
-    )
+    clean_image.save(output_buffer, format="PNG", optimize=True)
     return output_buffer.getvalue()
 
 
 def has_exif_metadata(image_bytes: bytes) -> bool:
     """
-    Inspects image bytes to detect whether any EXIF metadata dictionary is present.
+    Inspects image bytes to detect whether any EXIF metadata is present.
     """
     try:
         with Image.open(io.BytesIO(image_bytes)) as img:
