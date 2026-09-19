@@ -4,6 +4,7 @@ from backend.app.models.scan_ocr_result import ScanOcrResult
 from backend.app.models.scan_entity import ScanEntity
 from backend.app.models.scan_finding import ScanFinding
 from backend.app.models.scan_report import ScanReport
+from backend.app.models.scan_redaction import ScanRedaction
 
 __all__ = [
     "ScanSession",
@@ -12,6 +13,7 @@ __all__ = [
     "ScanEntity",
     "ScanFinding",
     "ScanReport",
+    "ScanRedaction",
 ]
 
 
