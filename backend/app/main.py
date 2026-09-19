@@ -13,6 +13,7 @@ from backend.app.core.exceptions import PersonaShieldError
 from backend.app.core.logging import logger, setup_logging
 from backend.app.core.middleware import (
     RequestIDMiddleware,
+    RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
     StructuredLoggingMiddleware,
 )
@@ -48,9 +49,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Register Middlewares (Order: Security Headers -> Structured Logging -> Request ID)
+    # Register Middlewares (Order of execution: Request ID -> Request Size Limit -> Security Headers -> Structured Logging)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(StructuredLoggingMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
     # Exception Handlers returning standard APIResponse envelope
