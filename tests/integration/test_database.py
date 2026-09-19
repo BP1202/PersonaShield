@@ -60,3 +60,53 @@ async def test_scan_session_and_file_model_crud(db_session: AsyncSession):
     updated = result.scalar_one()
     assert updated.status == ScanSessionStatus.PROCESSING
     assert updated.file.display_filename == "sample.png"
+
+
+@pytest.mark.asyncio
+async def test_ocr_and_entities_model_crud(db_session: AsyncSession):
+    from backend.app.models.scan_ocr_result import ScanOcrResult
+    from backend.app.models.scan_entity import ScanEntity
+
+    session_id = uuid.uuid4()
+    new_session = ScanSession(
+        id=session_id,
+        status=ScanSessionStatus.PROCESSING,
+    )
+    db_session.add(new_session)
+    await db_session.flush()
+
+    # Add OCR Result
+    ocr_result = ScanOcrResult(
+        scan_session_id=session_id,
+        raw_text="Secret: AKIAIOSFODNN7EXAMPLE",
+        normalized_text="Secret: AKIAIOSFODNN7EXAMPLE",
+        tokens=[{"text": "AKIAIOSFODNN7EXAMPLE", "confidence": 0.99, "bbox": [10, 10, 100, 30], "page_number": 1}],
+    )
+    db_session.add(ocr_result)
+
+    # Add Scan Entity
+    entity = ScanEntity(
+        scan_session_id=session_id,
+        category="CREDENTIAL",
+        entity_type="AWS_ACCESS_KEY",
+        text_snippet="AKIAIOSFODNN7EXAMPLE",
+        confidence=0.99,
+        bbox=[10, 10, 100, 30],
+        page_number=1,
+    )
+    db_session.add(entity)
+    await db_session.commit()
+
+    # Query with relationships
+    stmt = select(ScanSession).where(ScanSession.id == session_id)
+    result = await db_session.execute(stmt)
+    session = result.scalar_one()
+
+    assert session.ocr_result is not None
+    assert session.ocr_result.raw_text == "Secret: AKIAIOSFODNN7EXAMPLE"
+    assert len(session.ocr_result.tokens) == 1
+    assert len(session.entities) == 1
+    assert session.entities[0].category == "CREDENTIAL"
+    assert session.entities[0].entity_type == "AWS_ACCESS_KEY"
+    assert session.entities[0].bbox == [10, 10, 100, 30]
+
