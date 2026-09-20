@@ -14,9 +14,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
-  Stamp,
 } from "lucide-react";
-import { PurposeWatermarkModal } from "../components/safeshare/PurposeWatermarkModal";
 
 export const SafeSharePage: React.FC = () => {
   const { scanId } = useParams<{ scanId: string }>();
@@ -33,9 +31,6 @@ export const SafeSharePage: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
 
-  // Purpose Watermark State
-  const [watermarkText, setWatermarkText] = useState<string | null>(null);
-  const [isWatermarkModalOpen, setIsWatermarkModalOpen] = useState(false);
 
   // Initial load
   useEffect(() => {
@@ -199,19 +194,6 @@ export const SafeSharePage: React.FC = () => {
             <span>Image & PDF formats ready</span>
           </span>
 
-          {/* Purpose Stamp Button */}
-          <button
-            type="button"
-            onClick={() => setIsWatermarkModalOpen(true)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
-              watermarkText
-                ? "bg-red-950/80 text-red-300 border-red-500/40 shadow-sm"
-                : "bg-[#090B14] text-[#8CA3B8] hover:text-white border-[#1F2937] hover:border-[#8B5CF6]/50"
-            }`}
-          >
-            <Stamp className="w-3.5 h-3.5 text-[#EF4444]" />
-            <span>{watermarkText ? "Purpose Stamp Active" : "Add Purpose Stamp"}</span>
-          </button>
         </div>
       </div>
 
@@ -228,7 +210,6 @@ export const SafeSharePage: React.FC = () => {
           onSelectId={setSelectedId}
           isDrawingMode={isDrawingMode}
           onToggleDrawingMode={setIsDrawingMode}
-          watermarkText={watermarkText || undefined}
           onApplyCustomizations={handleApplyCustomizations}
         />
       )}
@@ -243,13 +224,6 @@ export const SafeSharePage: React.FC = () => {
         />
       )}
 
-      {/* Purpose Watermark Modal */}
-      <PurposeWatermarkModal
-        isOpen={isWatermarkModalOpen}
-        onClose={() => setIsWatermarkModalOpen(false)}
-        currentWatermark={watermarkText || undefined}
-        onApplyWatermark={(text) => setWatermarkText(text)}
-      />
     </div>
   );
 };
