@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   X,
   Check,
+  Sparkles,
 } from "lucide-react";
 import type { EvidenceCardData, EntityItem } from "../../types/api";
 
@@ -52,6 +53,7 @@ interface DetectionCanvasProps {
   onSelectId?: (id: string | null) => void;
   isDrawingMode?: boolean;
   onToggleDrawingMode?: (active: boolean) => void;
+  watermarkText?: string;
   onApplyCustomizations?: (
     customRegions: Array<{ bbox: [number, number, number, number]; mode: string; label?: string }>,
     overrideModes: Record<string, string>,
@@ -70,6 +72,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   onSelectId: controlledOnSelectId,
   isDrawingMode: controlledIsDrawingMode,
   onToggleDrawingMode: controlledOnToggleDrawingMode,
+  watermarkText,
   onApplyCustomizations,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -115,6 +118,55 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   const setIsDrawingMode = (active: boolean) => {
     if (controlledOnToggleDrawingMode) controlledOnToggleDrawingMode(active);
     else setLocalIsDrawingMode(active);
+  };
+
+  // 1-Click Share Profile Handler
+  const applyShareProfile = (profile: "job" | "kyc" | "whatsapp" | "developer") => {
+    setBoxes((prev) =>
+      prev.map((box) => {
+        const cat = (box.category || "").toLowerCase();
+        const lbl = (box.label || "").toLowerCase();
+
+        if (profile === "job") {
+          // Keep name and experience; mask salary, address, phone
+          if (
+            cat.includes("salary") ||
+            cat.includes("compensation") ||
+            cat.includes("phone") ||
+            cat.includes("address") ||
+            cat.includes("contact") ||
+            lbl.includes("phone") ||
+            lbl.includes("salary")
+          ) {
+            return { ...box, isIgnored: false, mode: "blur" };
+          }
+          return { ...box, isIgnored: true };
+        }
+
+        if (profile === "kyc") {
+          // Keep photo & name, mask central Aadhaar/PAN
+          if (cat.includes("aadhaar") || cat.includes("pan") || cat.includes("id") || lbl.includes("aadhaar") || lbl.includes("pan")) {
+            return { ...box, isIgnored: false, mode: "blur" };
+          }
+          return { ...box, isIgnored: false };
+        }
+
+        if (profile === "whatsapp") {
+          // Mask everything sensitive
+          return { ...box, isIgnored: false, mode: "blur" };
+        }
+
+        if (profile === "developer") {
+          // Blackout cloud keys, tokens, endpoints
+          if (cat.includes("aws") || cat.includes("key") || cat.includes("secret") || cat.includes("token") || lbl.includes("key")) {
+            return { ...box, isIgnored: false, mode: "blackout" };
+          }
+          return { ...box, isIgnored: false };
+        }
+
+        return box;
+      })
+    );
   };
 
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
@@ -538,6 +590,49 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
         </div>
       </div>
 
+      {/* 1-Click Share Profiles Quick Presets */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-2xl bg-[#090B14] border border-[#1F2937] text-xs">
+        <div className="flex items-center gap-1.5 text-[#8CA3B8] font-semibold">
+          <Sparkles className="w-3.5 h-3.5 text-[#8B5CF6]" />
+          <span>1-Click Share Profiles:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => applyShareProfile("job")}
+            className="px-2.5 py-1 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#E8EEF8] hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+            title="Mask salary, home address, and phone while keeping name and experience"
+          >
+            <span>👔 Job Application</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => applyShareProfile("kyc")}
+            className="px-2.5 py-1 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#E8EEF8] hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+            title="Keep photo and name, mask Aadhaar & PAN central numbers"
+          >
+            <span>🪪 KYC Copy</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => applyShareProfile("whatsapp")}
+            className="px-2.5 py-1 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#E8EEF8] hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+            title="Mask all sensitive details before sharing in group chats"
+          >
+            <span>💬 WhatsApp Safe</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => applyShareProfile("developer")}
+            className="px-2.5 py-1 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#E8EEF8] hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+            title="Blackout all API keys, secrets, tokens, and database strings"
+          >
+            <span>💻 Developer Mode</span>
+          </button>
+        </div>
+      </div>
+
       {/* 2. Floating Contextual Toolbar (Appears when user clicks any box) */}
       {activeSelectedItem && !showCompareSlider && (
         <div className="p-3.5 rounded-2xl bg-[#090B14] border border-[#8B5CF6]/50 shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -947,6 +1042,27 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
                     strokeWidth={2}
                     strokeDasharray="4 2"
                   />
+                )}
+
+                {/* Purpose Anti-Reuse Watermark Stamp (if enabled) */}
+                {watermarkText && (
+                  <g className="pointer-events-none select-none">
+                    <text
+                      x={imageNaturalSize.width / 2}
+                      y={imageNaturalSize.height / 2}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      transform={`rotate(-24, ${imageNaturalSize.width / 2}, ${imageNaturalSize.height / 2})`}
+                      fill="rgba(239, 68, 68, 0.45)"
+                      stroke="rgba(0, 0, 0, 0.6)"
+                      strokeWidth={1.5}
+                      fontSize={Math.max(16, Math.min(30, imageNaturalSize.width / 24))}
+                      fontWeight="900"
+                      letterSpacing="2px"
+                    >
+                      {watermarkText}
+                    </text>
+                  </g>
                 )}
               </svg>
             </div>

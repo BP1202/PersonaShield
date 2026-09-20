@@ -55,31 +55,28 @@ export const PrivacyCompareSection: React.FC<PrivacyCompareSectionProps> = ({
 
   // Sensitive leak regions on the exposed original document
   const leakZones = useMemo(() => {
-    if (evidenceCards.length > 0) {
-      return evidenceCards.map((c, idx) => {
-        const type = c.finding_type?.toUpperCase() || "";
-        let label = "Secret";
-        if (type.includes("AADHAAR") || type.includes("PAN") || type.includes("PASSPORT")) {
-          label = "Identity";
-        } else if (type.includes("PHONE") || type.includes("EMAIL")) {
-          label = "Contact";
-        }
+    return evidenceCards.map((c, idx) => {
+      const type = c.finding_type?.toUpperCase() || "";
+      let label = "Sensitive Info";
+      if (type.includes("AADHAAR") || type.includes("PAN") || type.includes("PASSPORT")) {
+        label = "Identity";
+      } else if (type.includes("PHONE") || type.includes("EMAIL")) {
+        label = "Contact";
+      } else if (type.includes("AWS") || type.includes("KEY") || type.includes("SECRET") || type.includes("TOKEN")) {
+        label = "Credential";
+      } else if (type.includes("UPI") || type.includes("CREDIT_CARD") || type.includes("FINANCIAL")) {
+        label = "Financial";
+      } else if (type.includes("WORKPLACE") || type.includes("INTERNAL")) {
+        label = "Internal";
+      }
 
-        const bbox = c.bbox || [20, 30 + idx * 60, 400, 70 + idx * 60];
-        return {
-          id: c.id || `leak-${idx}`,
-          label,
-          bbox,
-        };
-      });
-    }
-
-    return [
-      { id: "l1", label: "Cloud Key", bbox: [80, 40, 380, 85] },
-      { id: "l2", label: "National ID", bbox: [80, 110, 340, 155] },
-      { id: "l3", label: "Tax ID", bbox: [80, 180, 320, 225] },
-      { id: "l4", label: "Contact Info", bbox: [80, 250, 280, 290] },
-    ];
+      const bbox = c.bbox || [20, 30 + idx * 60, 400, 70 + idx * 60];
+      return {
+        id: c.id || `leak-${idx}`,
+        label,
+        bbox,
+      };
+    });
   }, [evidenceCards]);
 
   const previewSrc = redactedImageUrl || originalImageUrl;

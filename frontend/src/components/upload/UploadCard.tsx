@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { UploadCloud, File, AlertCircle, X, ArrowRight, ShieldCheck, Lock } from "lucide-react";
 import { Button } from "../common/Button";
 
@@ -22,7 +22,7 @@ export const UploadCard: React.FC<UploadCardProps> = ({ onUpload, isLoading = fa
   ];
   const maxBytes = 10 * 1024 * 1024; // 10 MB
 
-  const validateAndSetFile = (file: File) => {
+  const validateAndSetFile = useCallback((file: File) => {
     setError(null);
     if (!allowedTypes.includes(file.type)) {
       setError("Unsupported format. Please upload PNG, JPG, WebP, or PDF.");
@@ -41,7 +41,27 @@ export const UploadCard: React.FC<UploadCardProps> = ({ onUpload, isLoading = fa
     } else {
       setPreviewUrl(null);
     }
-  };
+  }, []);
+
+  // Global Ctrl+V Clipboard Paste Handler
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!e.clipboardData) return;
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            validateAndSetFile(file);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [validateAndSetFile]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -113,6 +133,14 @@ export const UploadCard: React.FC<UploadCardProps> = ({ onUpload, isLoading = fa
           {/* Animated glow icon */}
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#8B5CF6]/20 to-[#14B8A6]/20 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6] mb-4 shadow-lg shadow-[#8B5CF6]/15 group-hover:scale-105 transition-transform">
             <UploadCloud className="w-8 h-8" />
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 text-xs font-semibold text-[#A78BFA] mb-3">
+            <span>Press</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-[#1F2937] text-white font-mono text-[10px] border border-[#374151]">Ctrl</kbd>
+            <span>+</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-[#1F2937] text-white font-mono text-[10px] border border-[#374151]">V</kbd>
+            <span>to paste screenshot</span>
           </div>
 
           <h3 className="text-xl font-bold text-white mb-1.5 tracking-tight">

@@ -1,12 +1,13 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getReport } from "../api/report";
+import { getReport, generateReport } from "../api/report";
 import { getSafeShare, generateSafeShare } from "../api/safeshare";
 import { CyberSafetyReceiptCard } from "../components/report/CyberSafetyReceiptCard";
 import { PrivacyCompareSection } from "../components/report/PrivacyCompareSection";
 import { ReportActionHub } from "../components/report/ReportActionHub";
-import { ExplainabilityPanel } from "../components/findings/ExplainabilityPanel";
+import { CyberGuardianCard } from "../components/findings/CyberGuardianCard";
+import { saveScanToHistory } from "../utils/scanHistory";
 import { Button } from "../components/common/Button";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
@@ -16,7 +17,13 @@ export const ResultsPage: React.FC = () => {
   // Fetch report data
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["scan-report", scanId],
-    queryFn: () => getReport(scanId!),
+    queryFn: async () => {
+      try {
+        return await getReport(scanId!);
+      } catch {
+        return await generateReport(scanId!);
+      }
+    },
     enabled: !!scanId,
   });
 
@@ -32,6 +39,28 @@ export const ResultsPage: React.FC = () => {
     },
     enabled: !!scanId,
   });
+
+  // Derive values safely (may be null/undefined when loading or errored)
+  const receipt = data?.receipt;
+  const findingsList = data?.evidence_cards || (data as any)?.findings || [];
+  const originalUrl = `/api/v1/scan/${scanId}/preview`;
+  const sanitizedUrl = safeShareData?.download_url;
+
+  // Record scan in local privacy history — MUST be called before any early return
+  useEffect(() => {
+    if (scanId && data && receipt) {
+      saveScanToHistory({
+        scanId,
+        fileName: `Document (${receipt.risk_level})`,
+        itemsCount: findingsList.length,
+        scoreBefore: Math.max(0, 100 - (receipt.exposure_score || 0)),
+        scoreAfter: 98,
+        verdict: (receipt.exposure_score || 0) < 30 ? "SAFE TO SHARE" : "PROTECTED",
+      });
+    }
+  }, [scanId, data, receipt, findingsList.length]);
+
+  // --- Conditional renders AFTER all hooks ---
 
   if (isLoading) {
     return (
@@ -69,12 +98,6 @@ export const ResultsPage: React.FC = () => {
     );
   }
 
-  const receipt = data.receipt;
-  const findingsList = data.evidence_cards || (data as any).findings || [];
-  const chains = data.exposure_chains || [];
-  const originalUrl = `/api/v1/scan/${scanId}/preview`;
-  const sanitizedUrl = safeShareData?.download_url;
-
   return (
     <div className="max-w-5xl mx-auto space-y-6 py-4">
       {/* 1. Hero Decision Card ("One Decision Card") + 2. Bento Info Grid + 3. Risk Meter */}
@@ -86,7 +109,10 @@ export const ResultsPage: React.FC = () => {
         />
       )}
 
-      {/* 4. Before / After Privacy Comparison with Heatmap & Destination Presets */}
+      {/* 2. Cyber Guardian Experience (Threat Simulator + Privacy Coach + Emergency Action) */}
+      <CyberGuardianCard findings={findingsList} />
+
+      {/* 3. Before / After Privacy Comparison with Heatmap & Destination Presets */}
       {scanId && (
         <PrivacyCompareSection
           scanId={scanId}
@@ -105,9 +131,6 @@ export const ResultsPage: React.FC = () => {
           safeShareData={safeShareData}
         />
       )}
-
-      {/* 6. Privacy Insights (Plain English Cards + Collapsed Attack Vectors Accordion) */}
-      <ExplainabilityPanel findings={findingsList} chains={chains} />
     </div>
   );
 };

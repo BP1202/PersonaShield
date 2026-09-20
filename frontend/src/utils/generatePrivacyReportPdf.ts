@@ -27,7 +27,7 @@ export function generatePrivacyReportPdf({
       });
 
   // Calculate stats
-  const totalFound = Math.max(1, receipt?.total_findings || evidenceCards.length || 4);
+  const totalFound = receipt?.total_findings ?? evidenceCards.length ?? 0;
 
   // Map findings into user-friendly items
   const findingsList = evidenceCards.map((f, idx) => {
@@ -51,21 +51,42 @@ export function generatePrivacyReportPdf({
       why =
         "Exposes your official tax identifier, which is often requested by banks and financial services.";
       action = "Hide the middle characters before sending documents online.";
-    } else if (type.includes("AWS") || type.includes("KEY") || type.includes("SECRET")) {
+    } else if (type.includes("AWS") || type.includes("KEY") || type.includes("SECRET") || type.includes("TOKEN")) {
       itemTitle = "Cloud or API Secret";
       protectedCopy = "██████████████ (Solid Blackout)";
       why = "Anyone who sees this key may gain access to cloud services connected to your account.";
       action = "Rotate or deactivate the exposed key before sharing screenshots.";
     } else if (type.includes("PHONE")) {
       itemTitle = "Phone Number";
-      protectedCopy = "+91 *****" + (raw.slice(-4) || "3210");
+      protectedCopy = "+91 *****" + (raw.slice(-4) || "••••");
       why = "Exposed numbers are commonly used for spam, phishing messages, and SIM-swap attempts.";
       action = "Share only when absolutely required.";
     } else if (type.includes("EMAIL")) {
       itemTitle = "Email Address";
-      protectedCopy = "***@domain.com";
+      protectedCopy = "***@domain";
       why = "Can be scraped by bots for phishing and credential stuffing attacks.";
       action = "Share only with verified recipients.";
+    } else if (type.includes("UPI")) {
+      itemTitle = "UPI Payment ID";
+      protectedCopy = "Masked & Protected";
+      why = "Attackers can use exposed UPI IDs to send deceptive payment collect requests.";
+      action = "Mask payment addresses before sharing receipts.";
+    } else if (type.includes("CREDIT_CARD")) {
+      itemTitle = "Credit Card Number";
+      protectedCopy = "**** **** **** " + (raw.slice(-4) || "••••");
+      why = "Facilitates card-not-present fraud and online purchase abuse.";
+      action = "Freeze or hotlist the card if exposed publicly.";
+    } else if (type.includes("WORKPLACE") || type.includes("INTERNAL")) {
+      itemTitle = "Internal/Corporate Info";
+      protectedCopy = "Masked & Protected";
+      why = "Reveals internal network infrastructure or corporate details to potential attackers.";
+      action = "Redact private IPs and corporate hostnames before sharing.";
+    } else {
+      // Generic catch-all for any unrecognized finding type
+      itemTitle = f.finding_type?.replace(/_/g, " ").replace(/EXPOSURE$/i, "").replace(/\b\w/g, (c: string) => c.toUpperCase()).trim() || "Sensitive Information";
+      protectedCopy = "Masked & Protected";
+      why = "Private information exposed to recipients.";
+      action = "Review before sharing publicly.";
     }
 
     return {
@@ -77,39 +98,7 @@ export function generatePrivacyReportPdf({
     };
   });
 
-  // If no findings parsed, provide default realistic demo rows
-  if (findingsList.length === 0) {
-    findingsList.push(
-      {
-        id: 0,
-        itemTitle: "Government ID number",
-        protectedCopy: "XXXX XXXX 6012",
-        why: "Someone could misuse your identity information for verification requests or fake KYC.",
-        action: "Use a masked Aadhaar copy whenever possible.",
-      },
-      {
-        id: 1,
-        itemTitle: "PAN card number",
-        protectedCopy: "ABCDE****F",
-        why: "Exposes your official tax identifier linked to banking and tax records.",
-        action: "Hide the middle characters before sending documents online.",
-      },
-      {
-        id: 2,
-        itemTitle: "Phone number",
-        protectedCopy: "+91 *****3210",
-        why: "Exposed numbers are commonly targeted for spam, robocalls, and phishing messages.",
-        action: "Share only when absolutely required.",
-      },
-      {
-        id: 3,
-        itemTitle: "Cloud/API secret",
-        protectedCopy: "██████████████",
-        why: "Anyone who sees this key may gain access to cloud services connected to your account.",
-        action: "Rotate or deactivate the exposed key before sharing screenshots.",
-      }
-    );
-  }
+  // No fallback demo data — if there are no findings, show a clean message
 
   // Generate Table Rows for Page 1
   const protectedTableRowsHtml = findingsList

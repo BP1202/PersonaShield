@@ -1,12 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Shield, ArrowRight } from "lucide-react";
+import { Shield, ArrowRight, History } from "lucide-react";
+import { PrivacyHistoryDrawer } from "./PrivacyHistoryDrawer";
 
 interface AppShellProps {
   children: React.ReactNode;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const location = useLocation();
   const { scanId } = useParams();
 
@@ -79,10 +81,20 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             ))}
           </nav>
 
-          {/* Protection Engine Active Status */}
-          <div className="flex items-center gap-3">
+          {/* Right Header Actions: History Drawer + Engine Status */}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-semibold text-[#E8EEF8] hover:text-white transition-all cursor-pointer shadow-sm"
+              title="View your recent scan history on this device"
+            >
+              <History className="w-3.5 h-3.5 text-[#8B5CF6]" />
+              <span>History</span>
+            </button>
+
             <div 
-              className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#14B8A6]/10 border border-[#14B8A6]/30 text-[#14B8A6] text-xs font-medium cursor-help"
+              className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-[#14B8A6]/10 border border-[#14B8A6]/30 text-[#14B8A6] text-xs font-medium cursor-help"
               title="Processing on your device / secure backend. Original file is removed after 24h."
             >
               <span className="w-2 h-2 rounded-full bg-[#14B8A6] animate-pulse" />
@@ -91,6 +103,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           </div>
         </div>
       </header>
+
+      {/* Global Privacy History Drawer */}
+      <PrivacyHistoryDrawer isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
