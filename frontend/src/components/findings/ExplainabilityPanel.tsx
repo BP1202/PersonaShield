@@ -2,9 +2,10 @@ import React, { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  Cpu,
-  Target,
+  Shield,
+  AlertTriangle,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 import type { EvidenceCardData } from "../../types/api";
 
@@ -22,101 +23,101 @@ export const ExplainabilityPanel: React.FC<ExplainabilityPanelProps> = ({ findin
   const getSeverityBadge = (sev: string) => {
     switch (sev.toUpperCase()) {
       case "CRITICAL":
-        return "bg-red-950/60 text-red-400 border-red-500/40";
+        return "bg-red-950/80 text-red-400 border-red-500/40";
       case "HIGH":
-        return "bg-orange-950/60 text-orange-400 border-orange-500/40";
+        return "bg-amber-950/80 text-amber-400 border-amber-500/40";
       case "MEDIUM":
-        return "bg-amber-950/60 text-amber-400 border-amber-500/40";
+        return "bg-teal-950/80 text-teal-400 border-teal-500/40";
       default:
-        return "bg-emerald-950/60 text-emerald-400 border-emerald-500/40";
+        return "bg-emerald-950/80 text-emerald-400 border-emerald-500/40";
     }
   };
 
-  const getExplainabilityReason = (finding: EvidenceCardData) => {
+  const getHumanExplanation = (finding: EvidenceCardData) => {
     const type = finding.finding_type?.toUpperCase() || "";
-    if (type.includes("AWS") || type.includes("KEY")) {
+    if (type.includes("AWS") || type.includes("KEY") || type.includes("SECRET")) {
       return {
-        detectionMethod: "Regex Pattern + Shannon High-Entropy Validator",
-        exploitRisk: "Exposed cloud credentials allow unauthorized API invocation, full cloud infrastructure compromise, and data exfiltration.",
-        remediation: "Immediately rotate the IAM access key in AWS Console and revoke active sessions.",
+        whyItMatters: "Anyone who gets this document can use this key to access your cloud resources, read private databases, or run expensive compute on your bill.",
+        whatWeProtected: "The entire API secret is masked and rendered with Gaussian blur on the safe copy.",
+        whatYouShouldDo: "Rotate or deactivate this key in your cloud provider console before sharing any screenshot.",
       };
     }
     if (type.includes("AADHAAR")) {
       return {
-        detectionMethod: "12-Digit Verhoeff-Compliant Aadhaar Pattern Engine",
-        exploitRisk: "National identity numbers can be exploited for SIM-swap fraud, unauthorized KYC verification, and financial identity theft.",
-        remediation: "Mask first 8 digits or redact the entire Aadhaar number before publishing.",
+        whyItMatters: "Your 12-digit Aadhaar number is used for identity verification across banks, telecom providers, and government services. Leaking it exposes you to financial fraud or fraudulent SIM card registrations.",
+        whatWeProtected: "All 12 digits are masked with compliant partial masking (XXXX-XXXX-XXXX) and blurred.",
+        whatYouShouldDo: "Only share the protected copy, or download a masked e-Aadhaar from the official portal.",
       };
     }
     if (type.includes("PAN")) {
       return {
-        detectionMethod: "10-Character Alphanumeric Tax Identifier Regex Pattern",
-        exploitRisk: "Tax identity exposure enables credit card fraud and illicit financial account queries.",
-        remediation: "Apply blackout redaction over central alphanumeric sequences.",
+        whyItMatters: "Your PAN card is your permanent tax identity. Fraudsters can use it to track financial history, file fraudulent tax refunds, or attempt credit checks.",
+        whatWeProtected: "Central alphanumeric characters are completely masked and pixelated.",
+        whatYouShouldDo: "Share only the redacted version where the core tax ID numbers are permanently covered.",
       };
     }
     if (type.includes("PHONE")) {
       return {
-        detectionMethod: "E.164 International Phone Regex Matcher",
-        exploitRisk: "Direct contact leaks facilitate targeted phishing (smishing) and social engineering campaigns.",
-        remediation: "Mask phone number digits leaving only area code or redact completely.",
+        whyItMatters: "Exposing personal phone numbers on documents or social media makes you an easy target for targeted SMS phishing (smishing) and robocalls.",
+        whatWeProtected: "Phone number digits are shielded with privacy blackout or blur.",
+        whatYouShouldDo: "Keep your direct personal number private and use masked copies for public forms.",
       };
     }
     if (type.includes("EMAIL")) {
       return {
-        detectionMethod: "RFC-5322 Standardized Email Address Lexer",
-        exploitRisk: "Personal and enterprise emails are harvested by automated credential stuffing bots.",
-        remediation: "Mask username or domain before external sharing.",
+        whyItMatters: "Publicly visible email addresses get scraped by bots and targeted for phishing campaigns and credential stuffing attacks.",
+        whatWeProtected: "Email username and domain are shielded from automated screen scrapers.",
+        whatYouShouldDo: "Verify your email provider has 2-factor authentication enabled.",
       };
     }
     return {
-      detectionMethod: "Deterministic OCR Text Extraction + NLP Classifier",
-      exploitRisk: "Confidential text identified on digital canvas could lead to accidental intelligence leakage.",
-      remediation: "Review highlighted region and apply SafeShare privacy mask.",
+      whyItMatters: "Confidential private data was identified that shouldn't be shared openly without precaution.",
+      whatWeProtected: "The detected region has been placed into the SafeShare protection layer.",
+      whatYouShouldDo: "Review the protected copy to ensure all private information is properly hidden.",
     };
   };
 
   return (
-    <div className="w-full bg-[#0F172A] rounded-3xl p-6 sm:p-8 border border-[#1E293B] shadow-2xl space-y-6">
-      <div className="flex items-center justify-between pb-4 border-b border-[#1E293B]">
+    <div className="w-full bg-[#111827] rounded-3xl p-6 sm:p-8 border border-[#1F2937] shadow-2xl space-y-6">
+      <div className="flex items-center justify-between pb-4 border-b border-[#1F2937]">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-[#060816] border border-[#1E293B] text-[#7C3AED]">
-            <Cpu className="w-4.5 h-4.5" />
+          <div className="p-2.5 rounded-2xl bg-[#090B14] border border-[#1F2937] text-[#8B5CF6]">
+            <Shield className="w-5 h-5" />
           </div>
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>AI Findings & Reasoning Playbook</span>
-              <span className="px-2 py-0.5 rounded-full bg-[#7C3AED]/20 text-[#7C3AED] border border-[#7C3AED]/40 text-[10px] font-bold">
-                Explainable AI
+              <span>Privacy Findings: Why This Matters</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-[#8B5CF6]/20 text-[#8B5CF6] border border-[#8B5CF6]/40 text-[10px] font-bold">
+                Plain English Guide
               </span>
             </h3>
             <p className="text-xs text-[#8CA3B8]">
-              Deterministic explanations detailing detection methodology, exploit risk vectors, and remediation steps
+              Simple explanations of what was found, why it poses a risk, and how PersonaShield protected you.
             </p>
           </div>
         </div>
 
-        <span className="text-xs font-mono text-[#10B981] px-3 py-1 rounded-full bg-[#10B981]/10 border border-[#10B981]/30">
-          {findings.length} findings evaluated
+        <span className="text-xs font-medium text-[#14B8A6] px-3 py-1 rounded-full bg-[#14B8A6]/10 border border-[#14B8A6]/30">
+          {findings.length} findings protected
         </span>
       </div>
 
       <div className="space-y-3">
         {findings.map((f, idx) => {
           const isExpanded = expandedIdx === idx;
-          const meta = getExplainabilityReason(f);
+          const explanation = getHumanExplanation(f);
           const badgeClass = getSeverityBadge(f.severity);
 
           return (
             <div
               key={idx}
-              className="rounded-2xl bg-[#060816] border border-[#1E293B] overflow-hidden transition-all duration-200"
+              className="rounded-2xl bg-[#090B14] border border-[#1F2937] overflow-hidden transition-all duration-200"
             >
               {/* Card Header Row */}
               <button
                 type="button"
                 onClick={() => setExpandedIdx(isExpanded ? null : idx)}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#162032]/40 transition-colors cursor-pointer"
+                className="w-full p-4 flex items-center justify-between text-left hover:bg-[#162032]/60 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span
@@ -133,8 +134,8 @@ export const ExplainabilityPanel: React.FC<ExplainabilityPanelProps> = ({ findin
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-[#10B981] font-mono hidden md:inline">
-                    {Math.round(f.confidence * 100)}% Confidence
+                  <span className="text-[11px] text-[#14B8A6] font-medium hidden md:inline">
+                    {Math.round(f.confidence * 100)}% Match
                   </span>
                   {isExpanded ? (
                     <ChevronUp className="w-4 h-4 text-[#8CA3B8]" />
@@ -146,33 +147,37 @@ export const ExplainabilityPanel: React.FC<ExplainabilityPanelProps> = ({ findin
 
               {/* Expanded Explanations Drawer */}
               {isExpanded && (
-                <div className="p-4 pt-2 border-t border-[#1E293B] space-y-3.5 bg-[#0F172A]/40 text-xs">
+                <div className="p-4 pt-2 border-t border-[#1F2937] space-y-3 bg-[#111827]/40 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* Detection Method */}
-                    <div className="p-3 rounded-xl bg-[#060816] border border-[#1E293B]">
-                      <div className="flex items-center gap-1.5 text-[#7C3AED] font-semibold mb-1">
-                        <Cpu className="w-3.5 h-3.5" />
-                        <span>Detection Methodology</span>
+                    {/* Why this matters */}
+                    <div className="p-3.5 rounded-xl bg-[#090B14] border border-[#1F2937]">
+                      <div className="flex items-center gap-1.5 text-[#F59E0B] font-semibold mb-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Why This Matters</span>
                       </div>
-                      <p className="text-[#8CA3B8] leading-relaxed">{meta.detectionMethod}</p>
+                      <p className="text-[#8CA3B8] leading-relaxed">
+                        {explanation.whyItMatters}
+                      </p>
                     </div>
 
-                    {/* Exploit Vector */}
-                    <div className="p-3 rounded-xl bg-[#060816] border border-[#1E293B]">
-                      <div className="flex items-center gap-1.5 text-[#F59E0B] font-semibold mb-1">
-                        <Target className="w-3.5 h-3.5" />
-                        <span>Cybersecurity Threat Impact</span>
+                    {/* What PersonaShield protected */}
+                    <div className="p-3.5 rounded-xl bg-[#090B14] border border-[#1F2937]">
+                      <div className="flex items-center gap-1.5 text-[#8B5CF6] font-semibold mb-1.5">
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>What PersonaShield Protected</span>
                       </div>
-                      <p className="text-[#8CA3B8] leading-relaxed">{meta.exploitRisk}</p>
+                      <p className="text-[#8CA3B8] leading-relaxed">
+                        {explanation.whatWeProtected}
+                      </p>
                     </div>
                   </div>
 
                   {/* Recommendation Playbook */}
-                  <div className="p-3 rounded-xl bg-[#060816] border border-[#10B981]/30 flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
+                  <div className="p-3.5 rounded-xl bg-[#090B14] border border-[#22C55E]/30 flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-[#22C55E] shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-semibold text-white">Recommended Action: </span>
-                      <span className="text-[#8CA3B8]">{meta.remediation}</span>
+                      <span className="font-semibold text-white">What You Should Do Next: </span>
+                      <span className="text-[#8CA3B8]">{explanation.whatYouShouldDo}</span>
                     </div>
                   </div>
                 </div>
@@ -182,16 +187,16 @@ export const ExplainabilityPanel: React.FC<ExplainabilityPanelProps> = ({ findin
         })}
 
         {/* Global Metadata Strip Guarantee */}
-        <div className="p-4 rounded-2xl bg-[#060816] border border-[#10B981]/30 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-white">
-            <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
-            <span className="font-semibold">Hardware Metadata & EXIF Stripping:</span>
+        <div className="p-4 rounded-2xl bg-[#090B14] border border-[#14B8A6]/30 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2.5 text-white">
+            <CheckCircle2 className="w-4 h-4 text-[#14B8A6]" />
+            <span className="font-semibold">Photo Location & Device Info:</span>
             <span className="text-[#8CA3B8]">
-              GPS coordinates, device camera serials, and timestamps automatically purged.
+              Camera GPS coordinates and model details automatically stripped from the file before download.
             </span>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[#10B981] bg-[#10B981]/15 px-2.5 py-0.5 rounded-full border border-[#10B981]/30">
-            Guaranteed
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[#14B8A6] bg-[#14B8A6]/15 px-2.5 py-0.5 rounded-full border border-[#14B8A6]/30">
+            Erased
           </span>
         </div>
       </div>
