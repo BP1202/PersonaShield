@@ -1,17 +1,21 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Eye,
-  Shield,
-  Layers,
+  Edit3,
   SlidersHorizontal,
   Plus,
   Trash2,
+  Copy,
+  Layers,
+  EyeOff,
+  Shield,
+  ChevronRight,
+  ChevronLeft,
   X,
-  CheckCircle2,
+  Check,
 } from "lucide-react";
 import type { EvidenceCardData, EntityItem } from "../../types/api";
 
-export type VisualizationMode = "detection" | "blur" | "pixelate" | "blackout" | "compare";
 
 export interface CustomRegion {
   id: string;
@@ -19,6 +23,7 @@ export interface CustomRegion {
   mode: "blur" | "pixelate" | "blackout";
   bbox: [number, number, number, number]; // [x1, y1, x2, y2]
   isCustom: boolean;
+  isIgnored?: boolean;
 }
 
 export interface EditableFindingBox {
@@ -40,8 +45,8 @@ interface DetectionCanvasProps {
   redactedImageUrl?: string;
   findings?: EvidenceCardData[];
   entities?: EntityItem[];
-  activeMode: VisualizationMode;
-  onModeChange: (mode: VisualizationMode) => void;
+  activeMode?: any;
+  onModeChange?: (mode: any) => void;
   isRegenerating?: boolean;
   selectedId?: string | null;
   onSelectId?: (id: string | null) => void;
@@ -60,9 +65,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   redactedImageUrl,
   findings = [],
   entities = [],
-  activeMode,
-  onModeChange,
-  isRegenerating = false,
+  isRegenerating: _isRegenerating = false,
   selectedId: controlledSelectedId,
   onSelectId: controlledOnSelectId,
   isDrawingMode: controlledIsDrawingMode,
@@ -73,6 +76,15 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   const imageRef = useRef<HTMLImageElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+
+  // Compare Slider Toggle
+  const [showCompareSlider, setShowCompareSlider] = useState(false);
+  const [sliderPosition, setSliderPosition] = useState<number>(50);
+  const [isSliderDragging, setIsSliderDragging] = useState(false);
+
+  // Right-side collapsible Detection Sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   // Natural image dimensions
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number }>({
     width: 800,
@@ -82,8 +94,8 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   // State of all editable boxes
   const [boxes, setBoxes] = useState<EditableFindingBox[]>([]);
   const [customRegions, setCustomRegions] = useState<CustomRegion[]>([]);
-  
-  // Local vs Controlled selection
+
+  // Selection
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(null);
   const selectedId = controlledSelectedId !== undefined ? controlledSelectedId : localSelectedId;
   const setSelectedId = (id: string | null) => {
@@ -92,6 +104,10 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   };
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // Inline rename state for toolbar
+  const [isEditingLabel, setIsEditingLabel] = useState(false);
+  const [tempLabel, setTempLabel] = useState("");
 
   // Manual Draw State
   const [localIsDrawingMode, setLocalIsDrawingMode] = useState(false);
@@ -103,10 +119,13 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
 
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [currentDrawBbox, setCurrentDrawBbox] = useState<[number, number, number, number] | null>(null);
+  
+  // Modal State for new region
   const [showNewRegionModal, setShowNewRegionModal] = useState(false);
   const [pendingRegionBbox, setPendingRegionBbox] = useState<[number, number, number, number] | null>(null);
-  const [newRegionLabel, setNewRegionLabel] = useState("Signature / Face");
-  const [newRegionMode, setNewRegionMode] = useState<"blur" | "pixelate" | "blackout">("blackout");
+  const [newRegionCategory, setNewRegionCategory] = useState<string>("Face");
+  const [regionCustomLabel, setRegionCustomLabel] = useState<string>("Face");
+  const [newRegionMode, setNewRegionMode] = useState<"blur" | "pixelate" | "blackout">("blur");
 
   // Dragging / Resizing existing box
   const [activeDrag, setActiveDrag] = useState<{
@@ -117,11 +136,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
     startBbox: [number, number, number, number];
   } | null>(null);
 
-  // Compare mode slider position (0-100%)
-  const [sliderPosition, setSliderPosition] = useState<number>(50);
-  const [isSliderDragging, setIsSliderDragging] = useState<boolean>(false);
-
-  // Initialize boxes from findings/entities once loaded
+  // Initialize boxes from findings/entities
   useEffect(() => {
     const list: EditableFindingBox[] = [];
 
@@ -170,7 +185,6 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
     }
   };
 
-  // Convert client coordinates to SVG natural coordinates
   const getNaturalCoords = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
       if (!imageRef.current) return null;
@@ -185,15 +199,14 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   );
 
   // Compare mode slider move
-  const handleSliderMove = (clientX: number) => {
+  const handleSliderMove = useCallback((clientX: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-    const percentage = (x / rect.width) * 100;
+    const percentage = Math.round((x / rect.width) * 100);
     setSliderPosition(percentage);
-  };
+  }, []);
 
-  // Mouse / Touch events for Compare Slider
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (isSliderDragging) handleSliderMove(e.clientX);
@@ -208,9 +221,9 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [isSliderDragging]);
+  }, [isSliderDragging, handleSliderMove]);
 
-  // Handle Box Dragging and Resizing
+  // Box Dragging & Resizing
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!activeDrag || !imageRef.current) return;
@@ -248,10 +261,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
     };
 
     const onMouseUp = () => {
-      if (activeDrag && onApplyCustomizations) {
-        // Immediate sync on release
-        triggerAutoSync();
-      }
+      if (activeDrag) triggerAutoSync();
       setActiveDrag(null);
     };
 
@@ -263,7 +273,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [activeDrag, getNaturalCoords, imageNaturalSize, onApplyCustomizations]);
+  }, [activeDrag, getNaturalCoords, imageNaturalSize]);
 
   // Sync helper
   const triggerAutoSync = (
@@ -272,15 +282,17 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
   ) => {
     if (!onApplyCustomizations) return;
 
-    const customList = updatedCustom.map((c) => ({
-      bbox: c.bbox,
-      mode: c.mode,
-      label: c.label,
-    }));
+    const customList = updatedCustom
+      .filter((c) => !c.isIgnored)
+      .map((c) => ({
+        bbox: c.bbox,
+        mode: c.mode,
+        label: c.label,
+      }));
 
     const overrideModes: Record<string, string> = {};
     updatedBoxes.forEach((b) => {
-      if (!b.isIgnored && b.mode !== "blur") {
+      if (!b.isIgnored && b.mode) {
         overrideModes[b.id] = b.mode;
       }
     });
@@ -289,7 +301,7 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
     onApplyCustomizations(customList, overrideModes, selectedIds);
   };
 
-  // Handle Manual Drawing of Sensitive Areas
+  // Drawing manual regions
   const handleSvgMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!isDrawingMode) return;
     const coords = getNaturalCoords(e.clientX, e.clientY);
@@ -316,6 +328,8 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
     const [x1, y1, x2, y2] = currentDrawBbox;
     if (Math.abs(x2 - x1) > 15 && Math.abs(y2 - y1) > 15) {
       setPendingRegionBbox(currentDrawBbox);
+      setNewRegionCategory("Face");
+      setRegionCustomLabel("Face");
       setShowNewRegionModal(true);
     }
     setDrawStart(null);
@@ -325,359 +339,594 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
 
   const handleConfirmNewRegion = () => {
     if (!pendingRegionBbox) return;
+    const finalLabel = regionCustomLabel.trim() || newRegionCategory || "Custom Mask";
     const newId = `custom-${Date.now()}`;
     const newReg: CustomRegion = {
       id: newId,
-      label: newRegionLabel.trim() || "Custom Protected Area",
+      label: finalLabel,
       mode: newRegionMode,
       bbox: pendingRegionBbox,
       isCustom: true,
+      isIgnored: false,
     };
     const nextCustom = [...customRegions, newReg];
     setCustomRegions(nextCustom);
     setSelectedId(newId);
     setShowNewRegionModal(false);
     setPendingRegionBbox(null);
+    setRegionCustomLabel("");
     triggerAutoSync(boxes, nextCustom);
   };
 
-  const handleCancelNewRegion = () => {
-    setShowNewRegionModal(false);
-    setPendingRegionBbox(null);
+  // Toggle mask state: Allow user to unmask (keep visible) or mask
+  const handleToggleMask = (id: string = selectedId || "") => {
+    if (!id) return;
+    const isBox = boxes.some((b) => b.id === id);
+    if (isBox) {
+      const nextBoxes = boxes.map((b) =>
+        b.id === id ? { ...b, isIgnored: !b.isIgnored } : b
+      );
+      setBoxes(nextBoxes);
+      triggerAutoSync(nextBoxes, customRegions);
+    } else {
+      const nextCustom = customRegions.map((c) =>
+        c.id === id ? { ...c, isIgnored: !c.isIgnored } : c
+      );
+      setCustomRegions(nextCustom);
+      triggerAutoSync(boxes, nextCustom);
+    }
   };
 
-  // Change mask mode for a specific item (Immediately saved)
-  const handleItemModeChange = (id: string, mode: "blur" | "pixelate" | "blackout") => {
-    const nextBoxes = boxes.map((b) => (b.id === id ? { ...b, mode, isIgnored: false } : b));
-    const nextCustom = customRegions.map((c) => (c.id === id ? { ...c, mode } : c));
+  // Style change: Automatically ensures area is masked with that style
+  const handleStyleChange = (mode: "blur" | "pixelate" | "blackout") => {
+    if (!selectedId) return;
+    const nextBoxes = boxes.map((b) =>
+      b.id === selectedId ? { ...b, mode, isIgnored: false } : b
+    );
+    const nextCustom = customRegions.map((c) =>
+      c.id === selectedId ? { ...c, mode, isIgnored: false } : c
+    );
     setBoxes(nextBoxes);
     setCustomRegions(nextCustom);
     triggerAutoSync(nextBoxes, nextCustom);
   };
 
-  // Toggle ignore (or delete custom region)
-  const handleItemToggleIgnore = (id: string) => {
+  // Delete box: For custom regions, removes them; for auto-detected, unmasks them
+  const handleDelete = (id: string = selectedId || "") => {
+    if (!id) return;
     if (id.startsWith("custom-")) {
       const nextCustom = customRegions.filter((c) => c.id !== id);
       setCustomRegions(nextCustom);
       if (selectedId === id) setSelectedId(null);
       triggerAutoSync(boxes, nextCustom);
     } else {
-      const nextBoxes = boxes.map((b) => (b.id === id ? { ...b, isIgnored: !b.isIgnored } : b));
+      // Auto-detected item: toggle to ignored (unmasked / visible)
+      const nextBoxes = boxes.map((b) => (b.id === id ? { ...b, isIgnored: true } : b));
       setBoxes(nextBoxes);
       triggerAutoSync(nextBoxes, customRegions);
     }
   };
 
-  const getBoxColor = (severity: string, isIgnored: boolean) => {
-    if (isIgnored) {
-      return {
-        stroke: "#64748B",
-        fill: "rgba(100, 116, 139, 0.1)",
-        border: "border-slate-600",
-        text: "text-slate-400",
-        badgeBg: "bg-slate-900/80",
-      };
-    }
-    switch (severity.toUpperCase()) {
-      case "CRITICAL":
-        return {
-          stroke: "#EF4444",
-          fill: "rgba(239, 68, 68, 0.2)",
-          border: "border-red-500",
-          text: "text-red-400",
-          badgeBg: "bg-red-950/80",
-        };
-      case "HIGH":
-        return {
-          stroke: "#F59E0B",
-          fill: "rgba(245, 158, 11, 0.2)",
-          border: "border-amber-500",
-          text: "text-amber-400",
-          badgeBg: "bg-amber-950/80",
-        };
-      case "MEDIUM":
-        return {
-          stroke: "#14B8A6",
-          fill: "rgba(20, 184, 166, 0.2)",
-          border: "border-teal-500",
-          text: "text-teal-400",
-          badgeBg: "bg-teal-950/80",
-        };
-      default:
-        return {
-          stroke: "#8B5CF6",
-          fill: "rgba(139, 92, 246, 0.2)",
-          border: "border-purple-500",
-          text: "text-purple-400",
-          badgeBg: "bg-purple-950/80",
-        };
-    }
+  // Rename action
+  const handleConfirmRename = () => {
+    if (!selectedId || !tempLabel.trim()) return;
+    const newLabel = tempLabel.trim();
+    const nextBoxes = boxes.map((b) => (b.id === selectedId ? { ...b, label: newLabel } : b));
+    const nextCustom = customRegions.map((c) => (c.id === selectedId ? { ...c, label: newLabel } : c));
+    setBoxes(nextBoxes);
+    setCustomRegions(nextCustom);
+    setIsEditingLabel(false);
+    triggerAutoSync(nextBoxes, nextCustom);
   };
 
-  // Find currently selected item
+  const handleDuplicate = () => {
+    if (!selectedId) return;
+    const target = activeSelectedItem;
+    if (!target) return;
+
+    const [x1, y1, x2, y2] = target.bbox;
+    const offset = 20;
+    const newId = `custom-${Date.now()}`;
+    const newReg: CustomRegion = {
+      id: newId,
+      label: `Copy of ${target.label}`,
+      mode: target.mode,
+      bbox: [x1 + offset, y1 + offset, x2 + offset, y2 + offset],
+      isCustom: true,
+      isIgnored: false,
+    };
+    const nextCustom = [...customRegions, newReg];
+    setCustomRegions(nextCustom);
+    setSelectedId(newId);
+    triggerAutoSync(boxes, nextCustom);
+  };
+
+  // Selected item lookup
   const selectedBox = boxes.find((b) => b.id === selectedId);
   const selectedCustom = customRegions.find((c) => c.id === selectedId);
-  const activeSelectedItem = selectedBox || selectedCustom;
+  const activeSelectedItem = selectedBox
+    ? { ...selectedBox, isCustom: false }
+    : selectedCustom
+    ? { ...selectedCustom, isCustom: true, severity: "HIGH" as const }
+    : null;
 
-  const currentPreviewSrc =
-    activeMode === "detection" || activeMode === "compare"
-      ? originalImageUrl
-      : redactedImageUrl || originalImageUrl;
+  useEffect(() => {
+    if (activeSelectedItem) {
+      setTempLabel(activeSelectedItem.label);
+      setIsEditingLabel(false);
+    }
+  }, [selectedId, activeSelectedItem?.label]);
+
+  // All items for sidebar and canvas
+  const allSidebarItems = [
+    ...boxes.map((b) => ({ ...b, isCustom: false })),
+    ...customRegions.map((c) => ({
+      id: c.id,
+      label: c.label,
+      category: "CUSTOM",
+      severity: "HIGH" as const,
+      bbox: c.bbox,
+      mode: c.mode,
+      isIgnored: !!c.isIgnored,
+      isCustom: true,
+    })),
+  ];
+
+  const maskedCount = allSidebarItems.filter((i) => !i.isIgnored).length;
+  const unmaskedCount = allSidebarItems.filter((i) => i.isIgnored).length;
 
   return (
-    <div className="w-full bg-[#111827] rounded-3xl p-5 sm:p-7 border border-[#1F2937] shadow-2xl space-y-5">
-      {/* 1. Single Protection Editor Toolbar */}
+    <div className="w-full bg-[#111827] rounded-3xl p-5 sm:p-7 border border-[#1F2937] shadow-2xl space-y-4">
+      {/* 1. Top Toolbar (Clean Canvas Header + Add Area + Compare) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1F2937]">
-        <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-[#8B5CF6]" />
-          <h3 className="text-sm font-bold text-white tracking-tight">Protection Editor</h3>
-          <span className="text-xs text-[#8CA3B8] hidden md:inline">• Single Canvas Controller</span>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-2xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/30 flex items-center justify-center text-[#8B5CF6] shrink-0">
+            <Edit3 className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight">Interactive SafeShare Canvas</h3>
+              <span className="text-[10px] font-semibold text-[#22C55E] px-2 py-0.5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20">
+                Direct Click &amp; Drag
+              </span>
+            </div>
+            <p className="text-[11px] text-[#8CA3B8]">
+              Click any box to resize, unmask, or rename • Click and drag to protect custom areas
+            </p>
+          </div>
         </div>
 
-        {/* Toolbar items: Detect | Blur | Pixelate | Blackout | Compare | Add Area */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-[#090B14] p-1 rounded-xl border border-[#1F2937]">
-            {(
-              [
-                { id: "detection", label: "Detect", icon: Eye },
-                { id: "blur", label: "Blur", icon: Layers },
-                { id: "pixelate", label: "Pixelate", icon: Layers },
-                { id: "blackout", label: "Blackout", icon: Shield },
-                { id: "compare", label: "Compare", icon: SlidersHorizontal },
-              ] as const
-            ).map((m) => {
-              const Icon = m.icon;
-              const isActive = activeMode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onModeChange(m.id)}
-                  disabled={isRegenerating}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-[#8B5CF6] text-white shadow-md shadow-[#8B5CF6]/30"
-                      : "text-[#8CA3B8] hover:text-[#E8EEF8] hover:bg-[#1F2937]"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{m.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Add Area Button */}
+        {/* Action Controls: Add Protection Area + Compare Slider Toggle */}
+        <div className="flex items-center gap-2">
+          {/* Add Protection Area */}
           <button
             type="button"
-            onClick={() => {
-              setIsDrawingMode(!isDrawingMode);
-              if (activeMode !== "detection") onModeChange("detection");
-            }}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+            onClick={() => setIsDrawingMode(!isDrawingMode)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
               isDrawingMode
-                ? "bg-[#14B8A6] text-white border-[#14B8A6] shadow-lg shadow-[#14B8A6]/30 animate-pulse"
-                : "bg-[#162032] text-[#8CA3B8] border-[#1F2937] hover:text-[#E8EEF8] hover:border-[#8B5CF6]/40"
+                ? "bg-[#14B8A6] text-white border-[#14B8A6] shadow-md shadow-[#14B8A6]/30 animate-pulse"
+                : "bg-[#090B14] text-[#14B8A6] border-[#14B8A6]/40 hover:bg-[#14B8A6]/10"
             }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{isDrawingMode ? "Draw on Canvas" : "Add Area"}</span>
+            <Plus className="w-4 h-4" />
+            <span>{isDrawingMode ? "Drawing Active..." : "Draw Custom Box"}</span>
+          </button>
+
+          {/* Compare Slider Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowCompareSlider(!showCompareSlider)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              showCompareSlider
+                ? "bg-[#8B5CF6]/20 text-[#8B5CF6] border-[#8B5CF6]"
+                : "bg-[#090B14] text-[#8CA3B8] border-[#1F2937] hover:text-white"
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Compare</span>
+          </button>
+
+          {/* Toggle Sidebar */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-xl bg-[#090B14] border border-[#1F2937] text-[#8CA3B8] hover:text-white transition-colors cursor-pointer"
+            title={isSidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
+          >
+            {isSidebarOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* 2. Single Image Viewer / Canvas Container */}
-      <div
-        ref={containerRef}
-        className={`relative rounded-2xl overflow-hidden bg-[#090B14] border border-[#1F2937] min-h-[440px] flex items-center justify-center p-4 select-none ${
-          isDrawingMode ? "cursor-crosshair" : ""
-        }`}
-      >
-        {isRegenerating ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20">
-            <div className="w-10 h-10 border-3 border-[#8B5CF6] border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs font-medium text-[#8CA3B8]">
-              Rendering {activeMode.toUpperCase()} transformation across detected coordinates...
-            </span>
-          </div>
-        ) : (
-          <div className="relative max-w-full max-h-[520px] inline-block shadow-2xl">
-            {/* Base Image */}
-            <img
-              ref={imageRef}
-              src={currentPreviewSrc}
-              alt="Artifact Canvas"
-              onLoad={onImageLoad}
-              className={`rounded-xl max-w-full max-h-[520px] object-contain block border border-[#1F2937] ${
-                activeMode === "blur" && !redactedImageUrl ? "filter blur-sm" : ""
-              } ${
-                activeMode === "blackout" && !redactedImageUrl ? "brightness-50" : ""
+      {/* 2. Floating Contextual Toolbar (Appears when user clicks any box) */}
+      {activeSelectedItem && !showCompareSlider && (
+        <div className="p-3.5 rounded-2xl bg-[#090B14] border border-[#8B5CF6]/50 shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                activeSelectedItem.isIgnored
+                  ? "bg-amber-400 shadow-sm shadow-amber-400"
+                  : "bg-[#22C55E] shadow-sm shadow-emerald-400 animate-ping"
               }`}
             />
+            
+            <div className="min-w-0">
+              {/* Editable Name / Label */}
+              {isEditingLabel ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={tempLabel}
+                    onChange={(e) => setTempLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleConfirmRename();
+                      if (e.key === "Escape") setIsEditingLabel(false);
+                    }}
+                    placeholder="Enter area name..."
+                    className="px-2.5 py-1 rounded-lg bg-[#111827] border border-[#8B5CF6] text-white text-xs font-bold outline-none max-w-[220px]"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleConfirmRename}
+                    className="p-1 rounded-lg bg-[#8B5CF6] text-white hover:bg-[#7C3AED] transition-colors cursor-pointer"
+                    title="Save Name"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingLabel(false)}
+                    className="p-1 rounded-lg bg-[#1F2937] text-[#8CA3B8] hover:text-white transition-colors cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className="flex items-center gap-1.5 cursor-pointer group"
+                  onClick={() => setIsEditingLabel(true)}
+                  title="Click to rename this area"
+                >
+                  <span className="text-xs font-bold text-white group-hover:text-[#A78BFA] transition-colors truncate max-w-[240px]">
+                    {activeSelectedItem.label}
+                  </span>
+                  <Edit3 className="w-3 h-3 text-[#8CA3B8] group-hover:text-[#A78BFA] shrink-0" />
+                  <span
+                    className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 ${
+                      activeSelectedItem.isIgnored
+                        ? "bg-amber-950/80 text-amber-300 border border-amber-500/40"
+                        : "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                    }`}
+                  >
+                    {activeSelectedItem.isIgnored ? "Shown in Document" : "Masked"}
+                  </span>
+                </div>
+              )}
+              <p className="text-[10px] text-[#8CA3B8]">
+                {activeSelectedItem.isIgnored
+                  ? "Area will stay visible in final document • Click 'Mask' to hide"
+                  : "Protected area • Choose style or click 'Unmask' to show"}
+              </p>
+            </div>
+          </div>
 
-            {/* SVG Interactive Overlay (Inspect / Detect Mode) */}
-            {activeMode === "detection" && imageNaturalSize.width > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Toggle Unmask / Mask Button */}
+            <button
+              type="button"
+              onClick={() => handleToggleMask()}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                activeSelectedItem.isIgnored
+                  ? "bg-[#22C55E]/20 hover:bg-[#22C55E]/30 border-[#22C55E]/50 text-[#22C55E]"
+                  : "bg-amber-950/60 hover:bg-amber-900/80 border-amber-500/40 text-amber-300"
+              }`}
+            >
+              {activeSelectedItem.isIgnored ? (
+                <>
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Mask Area</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Unmask (Show Area)</span>
+                </>
+              )}
+            </button>
+
+            {/* Style Selector Buttons (Active when not ignored) */}
+            {!activeSelectedItem.isIgnored && (
+              <div className="flex items-center gap-1 bg-[#111827] p-1 rounded-xl border border-[#1F2937]">
+                <button
+                  type="button"
+                  onClick={() => handleStyleChange("blur")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all ${
+                    activeSelectedItem.mode === "blur"
+                      ? "bg-[#8B5CF6] text-white shadow-sm"
+                      : "text-[#8CA3B8] hover:text-white"
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>Blur</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleStyleChange("pixelate")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all ${
+                    activeSelectedItem.mode === "pixelate"
+                      ? "bg-[#14B8A6] text-white shadow-sm"
+                      : "text-[#8CA3B8] hover:text-white"
+                  }`}
+                >
+                  <EyeOff className="w-3 h-3" />
+                  <span>Pixelate</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleStyleChange("blackout")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all ${
+                    activeSelectedItem.mode === "blackout"
+                      ? "bg-slate-700 text-white shadow-sm"
+                      : "text-[#8CA3B8] hover:text-white"
+                  }`}
+                >
+                  <Shield className="w-3 h-3" />
+                  <span>Blackout</span>
+                </button>
+              </div>
+            )}
+
+            {/* Duplicate Button */}
+            <button
+              type="button"
+              onClick={handleDuplicate}
+              className="p-1.5 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#8CA3B8] hover:text-white transition-colors cursor-pointer"
+              title="Duplicate Box"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Delete / Remove Button */}
+            <button
+              type="button"
+              onClick={() => handleDelete()}
+              className="p-1.5 rounded-xl bg-[#111827] hover:bg-red-950/80 border border-[#1F2937] hover:border-red-500/40 text-[#8CA3B8] hover:text-red-400 transition-colors cursor-pointer"
+              title={activeSelectedItem.isCustom ? "Delete Custom Box" : "Unmask (Show Area)"}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Deselect */}
+            <button
+              type="button"
+              onClick={() => setSelectedId(null)}
+              className="p-1.5 rounded-xl bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#8CA3B8] hover:text-white transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Main Workspace: Canvas + Right-side Detection Sidebar */}
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        {/* Canvas Area */}
+        <div
+          ref={containerRef}
+          className={`relative flex-1 w-full rounded-2xl bg-[#090B14] border border-[#1F2937] p-4 flex items-center justify-center overflow-hidden min-h-[420px] select-none ${
+            isDrawingMode ? "cursor-crosshair" : showCompareSlider ? "cursor-ew-resize" : "cursor-default"
+          }`}
+          onMouseDown={() => {
+            if (showCompareSlider) setIsSliderDragging(true);
+          }}
+          onTouchMove={(e) => {
+            if (showCompareSlider) handleSliderMove(e.touches[0].clientX);
+          }}
+        >
+          {/* Compare Slider Mode */}
+          {showCompareSlider ? (
+            <div className="relative max-w-full max-h-[500px] inline-block shadow-2xl">
+              <img
+                src={originalImageUrl}
+                alt="Original Document"
+                className="max-w-full max-h-[500px] object-contain block rounded-xl border border-[#1F2937]"
+              />
+
+              {/* Clipped Redacted Layer */}
+              <div
+                className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden"
+                style={{
+                  clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)`,
+                }}
+              >
+                <img
+                  src={redactedImageUrl || originalImageUrl}
+                  alt="Protected Document"
+                  className="w-full h-full object-contain block"
+                />
+              </div>
+
+              {/* Glowing Purple Divider */}
+              <div
+                className="absolute top-0 bottom-0 w-1 bg-[#8B5CF6] shadow-[0_0_12px_#8B5CF6] z-10 pointer-events-none"
+                style={{ left: `${sliderPosition}%` }}
+              >
+                <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-[#8B5CF6] text-white border-2 border-white shadow-2xl flex items-center justify-center font-bold text-xs">
+                  ↔
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Standard Interactive Canvas with SVG Overlays */
+            <div className="relative max-w-full max-h-[500px] inline-block shadow-2xl">
+              <img
+                ref={imageRef}
+                src={originalImageUrl}
+                alt="Document Preview"
+                onLoad={onImageLoad}
+                className="max-w-full max-h-[500px] object-contain block rounded-xl"
+              />
+
+              {/* Redacted regions preview mask */}
               <svg
                 ref={svgRef}
-                className="absolute inset-0 w-full h-full"
                 viewBox={`0 0 ${imageNaturalSize.width} ${imageNaturalSize.height}`}
-                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full pointer-events-auto"
                 onMouseDown={handleSvgMouseDown}
                 onMouseMove={handleSvgMouseMove}
                 onMouseUp={handleSvgMouseUp}
               >
-                {/* Finding Boxes */}
-                {boxes.map((box) => {
-                  const [minX, minY, maxX, maxY] = box.bbox;
-                  const width = Math.max(10, maxX - minX);
-                  const height = Math.max(10, maxY - minY);
-                  const color = getBoxColor(box.severity, box.isIgnored);
-                  const isSelected = selectedId === box.id;
-                  const isHovered = hoveredId === box.id;
+                {/* Visual Masks for each box */}
+                {allSidebarItems.map((item) => {
+                  const [x1, y1, x2, y2] = item.bbox;
+                  const width = x2 - x1;
+                  const height = y2 - y1;
+                  const isSelected = selectedId === item.id;
+                  const isHovered = hoveredId === item.id;
+                  const isIgnored = item.isIgnored;
+
+                  // Fill color depends on mode or unmasked state
+                  let fill = "rgba(139, 92, 246, 0.4)";
+                  if (isIgnored) {
+                    fill = "rgba(245, 158, 11, 0.08)";
+                  } else if (item.mode === "blackout") {
+                    fill = "rgba(17, 24, 39, 0.95)";
+                  } else if (item.mode === "pixelate") {
+                    fill = "rgba(20, 184, 166, 0.5)";
+                  }
+
+                  const strokeColor = isSelected
+                    ? isIgnored ? "#F59E0B" : "#8B5CF6"
+                    : isHovered
+                    ? isIgnored ? "#FBBF24" : "#2DD4BF"
+                    : isIgnored
+                    ? "rgba(245, 158, 11, 0.6)"
+                    : "rgba(139, 92, 246, 0.6)";
 
                   return (
                     <g
-                      key={box.id}
-                      className="cursor-pointer"
+                      key={item.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedId(box.id);
+                        setSelectedId(item.id);
                       }}
-                      onMouseEnter={() => setHoveredId(box.id)}
+                      onMouseEnter={() => setHoveredId(item.id)}
                       onMouseLeave={() => setHoveredId(null)}
+                      className="cursor-pointer"
                     >
+                      {/* Mask Fill */}
                       <rect
-                        x={minX}
-                        y={minY}
+                        x={x1}
+                        y={y1}
                         width={width}
                         height={height}
-                        fill={
-                          isSelected
-                            ? "rgba(139, 92, 246, 0.35)"
-                            : isHovered
-                            ? color.fill
-                            : box.isIgnored
-                            ? "rgba(100, 116, 139, 0.08)"
-                            : "rgba(239, 68, 68, 0.12)"
-                        }
-                        stroke={isSelected ? "#8B5CF6" : color.stroke}
-                        strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 2}
-                        strokeDasharray={box.isIgnored ? "4 4" : box.severity === "CRITICAL" ? "none" : "5 2"}
-                        rx="4"
+                        fill={fill}
+                        rx={4}
+                        stroke={strokeColor}
+                        strokeWidth={isSelected ? 3 : 1.5}
+                        strokeDasharray={isIgnored ? "4 4" : isSelected ? "4 2" : undefined}
                       />
 
-                      {/* Corner Handles if Selected */}
+                      {/* Label badge */}
+                      <rect
+                        x={x1}
+                        y={Math.max(0, y1 - 18)}
+                        width={Math.min(140, item.label.length * 7 + (isIgnored ? 40 : 16))}
+                        height={16}
+                        fill="#090B14"
+                        stroke={strokeColor}
+                        strokeWidth={0.8}
+                        rx={3}
+                      />
+                      <text
+                        x={x1 + 5}
+                        y={Math.max(12, y1 - 6)}
+                        fill={isIgnored ? "#FBBF24" : "#FFFFFF"}
+                        fontSize={9}
+                        fontWeight="bold"
+                      >
+                        {item.label.slice(0, 12)}
+                        {isIgnored ? " (Visible)" : ""}
+                      </text>
+
+                      {/* Resizing Handles (When Selected) */}
                       {isSelected && (
                         <>
-                          <circle
-                            cx={minX}
-                            cy={minY}
-                            r="6"
-                            fill="#8B5CF6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nwse-resize"
+                          <rect
+                            x={x1 - 4}
+                            y={y1 - 4}
+                            width={8}
+                            height={8}
+                            fill={isIgnored ? "#F59E0B" : "#8B5CF6"}
+                            className="cursor-nw-resize"
                             onMouseDown={(e) => {
                               e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: box.id,
-                                  type: "nw",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: box.bbox,
-                                });
-                              }
+                              setActiveDrag({
+                                id: item.id,
+                                type: "nw",
+                                startX: getNaturalCoords(e.clientX, e.clientY)?.x || x1,
+                                startY: getNaturalCoords(e.clientX, e.clientY)?.y || y1,
+                                startBbox: item.bbox,
+                              });
                             }}
                           />
-                          <circle
-                            cx={minX + width}
-                            cy={minY}
-                            r="6"
-                            fill="#8B5CF6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nesw-resize"
+                          <rect
+                            x={x2 - 4}
+                            y={y1 - 4}
+                            width={8}
+                            height={8}
+                            fill={isIgnored ? "#F59E0B" : "#8B5CF6"}
+                            className="cursor-ne-resize"
                             onMouseDown={(e) => {
                               e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: box.id,
-                                  type: "ne",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: box.bbox,
-                                });
-                              }
+                              setActiveDrag({
+                                id: item.id,
+                                type: "ne",
+                                startX: getNaturalCoords(e.clientX, e.clientY)?.x || x2,
+                                startY: getNaturalCoords(e.clientX, e.clientY)?.y || y1,
+                                startBbox: item.bbox,
+                              });
                             }}
                           />
-                          <circle
-                            cx={minX}
-                            cy={minY + height}
-                            r="6"
-                            fill="#8B5CF6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nesw-resize"
+                          <rect
+                            x={x1 - 4}
+                            y={y2 - 4}
+                            width={8}
+                            height={8}
+                            fill={isIgnored ? "#F59E0B" : "#8B5CF6"}
+                            className="cursor-sw-resize"
                             onMouseDown={(e) => {
                               e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: box.id,
-                                  type: "sw",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: box.bbox,
-                                });
-                              }
+                              setActiveDrag({
+                                id: item.id,
+                                type: "sw",
+                                startX: getNaturalCoords(e.clientX, e.clientY)?.x || x1,
+                                startY: getNaturalCoords(e.clientX, e.clientY)?.y || y2,
+                                startBbox: item.bbox,
+                              });
                             }}
                           />
-                          <circle
-                            cx={minX + width}
-                            cy={minY + height}
-                            r="6"
-                            fill="#8B5CF6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nwse-resize"
+                          <rect
+                            x={x2 - 4}
+                            y={y2 - 4}
+                            width={8}
+                            height={8}
+                            fill={isIgnored ? "#F59E0B" : "#8B5CF6"}
+                            className="cursor-se-resize"
                             onMouseDown={(e) => {
                               e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: box.id,
-                                  type: "se",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: box.bbox,
-                                });
-                              }
-                            }}
-                          />
-                          <circle
-                            cx={minX + width / 2}
-                            cy={minY + height / 2}
-                            r="7"
-                            fill="#8B5CF6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-move"
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: box.id,
-                                  type: "move",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: box.bbox,
-                                });
-                              }
+                              setActiveDrag({
+                                id: item.id,
+                                type: "se",
+                                startX: getNaturalCoords(e.clientX, e.clientY)?.x || x2,
+                                startY: getNaturalCoords(e.clientX, e.clientY)?.y || y2,
+                                startBbox: item.bbox,
+                              });
                             }}
                           />
                         </>
@@ -686,331 +935,203 @@ export const DetectionCanvas: React.FC<DetectionCanvasProps> = ({
                   );
                 })}
 
-                {/* Custom User-Drawn Regions */}
-                {customRegions.map((custom) => {
-                  const [minX, minY, maxX, maxY] = custom.bbox;
-                  const width = Math.max(10, maxX - minX);
-                  const height = Math.max(10, maxY - minY);
-                  const isSelected = selectedId === custom.id;
-                  const isHovered = hoveredId === custom.id;
-
-                  return (
-                    <g
-                      key={custom.id}
-                      className="cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedId(custom.id);
-                      }}
-                      onMouseEnter={() => setHoveredId(custom.id)}
-                      onMouseLeave={() => setHoveredId(null)}
-                    >
-                      <rect
-                        x={minX}
-                        y={minY}
-                        width={width}
-                        height={height}
-                        fill={isSelected ? "rgba(20, 184, 166, 0.35)" : "rgba(20, 184, 166, 0.15)"}
-                        stroke="#14B8A6"
-                        strokeWidth={isSelected ? 3 : isHovered ? 2.5 : 2}
-                        rx="4"
-                      />
-
-                      {isSelected && (
-                        <>
-                          <circle
-                            cx={minX}
-                            cy={minY}
-                            r="6"
-                            fill="#14B8A6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nwse-resize"
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: custom.id,
-                                  type: "nw",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: custom.bbox,
-                                });
-                              }
-                            }}
-                          />
-                          <circle
-                            cx={minX + width}
-                            cy={minY + height}
-                            r="6"
-                            fill="#14B8A6"
-                            stroke="#FFFFFF"
-                            strokeWidth="2"
-                            className="cursor-nwse-resize"
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              const coords = getNaturalCoords(e.clientX, e.clientY);
-                              if (coords) {
-                                setActiveDrag({
-                                  id: custom.id,
-                                  type: "se",
-                                  startX: coords.x,
-                                  startY: coords.y,
-                                  startBbox: custom.bbox,
-                                });
-                              }
-                            }}
-                          />
-                        </>
-                      )}
-                    </g>
-                  );
-                })}
-
-                {/* In-Progress Draw Rectangle */}
-                {isDrawingMode && currentDrawBbox && (
+                {/* Current Drawing Box */}
+                {currentDrawBbox && (
                   <rect
                     x={currentDrawBbox[0]}
                     y={currentDrawBbox[1]}
-                    width={Math.max(2, currentDrawBbox[2] - currentDrawBbox[0])}
-                    height={Math.max(2, currentDrawBbox[3] - currentDrawBbox[1])}
-                    fill="rgba(20, 184, 166, 0.25)"
+                    width={currentDrawBbox[2] - currentDrawBbox[0]}
+                    height={currentDrawBbox[3] - currentDrawBbox[1]}
+                    fill="rgba(20, 184, 166, 0.3)"
                     stroke="#14B8A6"
-                    strokeWidth="2"
+                    strokeWidth={2}
                     strokeDasharray="4 2"
-                    rx="4"
                   />
                 )}
               </svg>
-            )}
+            </div>
+          )}
+        </div>
 
-            {/* Split Slider (Compare Mode) */}
-            {activeMode === "compare" && redactedImageUrl && (
-              <>
-                <div
-                  className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none"
-                  style={{ width: `${sliderPosition}%` }}
-                >
-                  <img
-                    src={redactedImageUrl}
-                    alt="Sanitized Version"
-                    className="max-w-none max-h-[520px] rounded-xl object-contain"
-                    style={{
-                      width: imageRef.current?.clientWidth,
-                      height: imageRef.current?.clientHeight,
-                    }}
-                  />
-                  <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-[#22C55E]/90 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider">
-                    Protected (Sanitized)
-                  </div>
-                </div>
-
-                <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-[#EF4444]/90 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider pointer-events-none">
-                  Original (Unprotected)
-                </div>
-
-                {/* Slider Handle */}
-                <div
-                  className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize shadow-2xl flex items-center justify-center z-10"
-                  style={{ left: `${sliderPosition}%` }}
-                  onMouseDown={() => setIsSliderDragging(true)}
-                  onTouchMove={(e) => handleSliderMove(e.touches[0].clientX)}
-                >
-                  <div className="w-7 h-7 rounded-full bg-white shadow-xl flex items-center justify-center text-[#090B14] font-bold text-xs">
-                    ↔
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Verification Guarantee Watermark */}
-            <div className="absolute bottom-3 right-3 px-3 py-1 rounded-full bg-[#090B14]/90 backdrop-blur-md border border-[#1F2937] text-[#14B8A6] text-[11px] font-semibold flex items-center gap-1.5 shadow-xl pointer-events-none">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>
-                {activeMode === "compare"
-                  ? "Before • After (Original never leaves your device)"
-                  : activeMode === "detection"
-                  ? `${boxes.length + customRegions.length} Protected Zones Tracked`
-                  : "All Identifiers & Camera Location Removed"}
+        {/* 4. Detection Sidebar (Right-Side Drawer showing all items with Mask / Unmask controls) */}
+        {isSidebarOpen && (
+          <div className="w-full lg:w-80 bg-[#090B14] rounded-2xl p-4 border border-[#1F2937] shadow-xl space-y-3 shrink-0">
+            <div className="flex items-center justify-between pb-2 border-b border-[#1F2937]">
+              <div>
+                <span className="text-xs font-bold text-white uppercase tracking-wider block">
+                  Detected Areas
+                </span>
+                <span className="text-[10px] text-[#8CA3B8]">
+                  {maskedCount} Masked • {unmaskedCount} Visible
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-[#22C55E] px-2 py-0.5 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20">
+                {maskedCount} Protected
               </span>
+            </div>
+
+            <div className="space-y-2 max-h-[390px] overflow-y-auto pr-1">
+              {allSidebarItems.map((item) => {
+                const isSelected = selectedId === item.id;
+                const isIgnored = item.isIgnored;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setSelectedId(item.id)}
+                    className={`w-full p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? "bg-[#8B5CF6]/15 border-[#8B5CF6] text-white shadow-sm"
+                        : isIgnored
+                        ? "bg-[#111827]/60 border-[#1F2937] text-[#8CA3B8] opacity-85 hover:border-amber-500/40"
+                        : "bg-[#111827] border-[#1F2937] text-[#8CA3B8] hover:border-[#8B5CF6]/40 hover:text-white"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate text-white flex items-center gap-1.5">
+                        <span className="truncate">{item.label}</span>
+                        {item.isCustom && (
+                          <span className="text-[9px] px-1 rounded bg-[#8B5CF6]/20 text-[#C4B5FD] font-mono shrink-0">
+                            Custom
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
+                        {isIgnored ? (
+                          <span className="text-amber-400 font-medium flex items-center gap-1">
+                            <Eye className="w-3 h-3" /> Visible in document
+                          </span>
+                        ) : (
+                          <span className="text-emerald-400 font-medium flex items-center gap-1">
+                            <Shield className="w-3 h-3" /> {item.mode} applied
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quick Toggle Button on card */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleMask(item.id);
+                      }}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer shrink-0 ${
+                        isIgnored
+                          ? "bg-[#22C55E]/15 hover:bg-[#22C55E]/25 border-[#22C55E]/40 text-[#22C55E]"
+                          : "bg-amber-950/60 hover:bg-amber-900/80 border-amber-500/40 text-amber-300"
+                      }`}
+                      title={isIgnored ? "Click to mask this area" : "Click to unmask and keep visible"}
+                    >
+                      {isIgnored ? "Mask" : "Unmask"}
+                    </button>
+                  </div>
+                );
+              })}
+
+
             </div>
           </div>
         )}
       </div>
 
-      {/* 3. Selected Detection Panel (Inspector) */}
-      {activeSelectedItem && activeMode === "detection" && (
-        <div className="bg-[#162032] border border-[#8B5CF6]/30 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-150">
-          <div className="space-y-1">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-[#8CA3B8]">
-              Selected Area
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">
-                {activeSelectedItem.label}
-              </span>
-              {"severity" in activeSelectedItem && (
-                <span
-                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                    getBoxColor(activeSelectedItem.severity, (activeSelectedItem as any).isIgnored).badgeBg
-                  } ${getBoxColor(activeSelectedItem.severity, (activeSelectedItem as any).isIgnored).text} ${
-                    getBoxColor(activeSelectedItem.severity, (activeSelectedItem as any).isIgnored).border
-                  }`}
-                >
-                  {activeSelectedItem.severity} • {Math.round(activeSelectedItem.confidence * 100)}% Match
-                </span>
-              )}
-              {activeSelectedItem.isCustom && (
-                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-teal-950/80 text-teal-400 border border-teal-500/40">
-                  Custom Area
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Protection Style & Quick Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-[#090B14] p-1 rounded-xl border border-[#1F2937]">
-              <span className="text-[11px] text-[#8CA3B8] font-medium px-2">Protection Style:</span>
-              {(["blackout", "blur", "pixelate"] as const).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => handleItemModeChange(activeSelectedItem.id, st)}
-                  className={`px-3 py-1 text-xs font-semibold rounded-lg capitalize border transition-all cursor-pointer ${
-                    activeSelectedItem.mode === st && !(activeSelectedItem as any).isIgnored
-                      ? "bg-[#8B5CF6] text-white border-[#8B5CF6] shadow-sm shadow-[#8B5CF6]/40"
-                      : "bg-[#111827] text-[#8CA3B8] border-[#1F2937] hover:text-[#E8EEF8]"
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-
-            {/* Quick Actions: Restore / Delete */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleItemToggleIgnore(activeSelectedItem.id)}
-                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
-                  (activeSelectedItem as any).isIgnored
-                    ? "bg-[#22C55E]/20 text-[#22C55E] border-[#22C55E]/40"
-                    : "bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/30 hover:bg-[#EF4444]/25"
-                }`}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>
-                  {activeSelectedItem.isCustom
-                    ? "Delete"
-                    : (activeSelectedItem as any).isIgnored
-                    ? "Keep"
-                    : "Delete"}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedId(null)}
-                className="p-1.5 rounded-xl text-[#8CA3B8] hover:text-white hover:bg-[#111827] cursor-pointer"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Modal: Add Sensitive Area */}
+      {/* 5. Add Area Modal Popup with User-Written Custom Label + Predefined Presets */}
       {showNewRegionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-[#111827] border border-[#1F2937] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1F2937]">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[#14B8A6]" />
-                <h4 className="text-base font-bold text-white">Protect New Sensitive Area</h4>
-              </div>
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#111827] rounded-3xl p-6 border border-[#1F2937] shadow-2xl max-w-sm w-full space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <h4 className="text-base font-bold text-white">Protect This Area</h4>
               <button
                 type="button"
-                onClick={handleCancelNewRegion}
-                className="text-[#8CA3B8] hover:text-white cursor-pointer"
+                onClick={() => setShowNewRegionModal(false)}
+                className="p-1 rounded-lg text-[#8CA3B8] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3.5 text-xs">
+              {/* Predefined Quick Presets */}
               <div>
-                <label className="block text-xs font-medium text-[#8CA3B8] mb-1">
-                  Area Description
+                <label className="text-[#8CA3B8] block mb-1.5 font-semibold">
+                  Predefined Presets (Click to select):
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["Face", "Signature", "QR Code", "Text", "ID Number", "Secret Key", "Contact Info"].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setNewRegionCategory(cat);
+                        setRegionCustomLabel(cat);
+                      }}
+                      className={`p-2 rounded-xl border font-semibold text-center cursor-pointer transition-all ${
+                        regionCustomLabel === cat
+                          ? "bg-[#8B5CF6]/20 border-[#8B5CF6] text-white shadow-sm"
+                          : "bg-[#090B14] border-[#1F2937] text-[#8CA3B8] hover:text-white"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* User-Written Custom Name Input */}
+              <div>
+                <label className="text-[#8CA3B8] block mb-1.5 font-semibold">
+                  Area Name / Label (User-written):
                 </label>
                 <input
                   type="text"
-                  value={newRegionLabel}
-                  onChange={(e) => setNewRegionLabel(e.target.value)}
-                  placeholder="e.g. Signature, Face Photo, QR Code"
-                  className="w-full bg-[#090B14] border border-[#1F2937] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#8B5CF6]"
+                  value={regionCustomLabel}
+                  onChange={(e) => setRegionCustomLabel(e.target.value)}
+                  placeholder="e.g. Passport Photo, Employee Badge, Note..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#090B14] border border-[#1F2937] focus:border-[#8B5CF6] text-white text-xs outline-none transition-colors"
                 />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {["Signature", "Face Photo", "QR Code", "Private Account"].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setNewRegionLabel(preset)}
-                      className="text-[11px] px-2 py-0.5 rounded-md bg-[#162032] border border-[#1F2937] text-[#8CA3B8] hover:text-white hover:border-[#8B5CF6]/40 cursor-pointer"
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[10px] text-[#8CA3B8] mt-1">
+                  You can choose a preset above or type your own custom label.
+                </p>
               </div>
 
+              {/* Protection Style */}
               <div>
-                <label className="block text-xs font-medium text-[#8CA3B8] mb-1">
-                  Protection Style
+                <label className="text-[#8CA3B8] block mb-1.5 font-semibold">
+                  Protection Style:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      { id: "blackout", label: "Blackout", desc: "Permanent solid block" },
-                      { id: "blur", label: "Blur", desc: "Soft obscuration" },
-                      { id: "pixelate", label: "Pixelate", desc: "Large pixels" },
-                    ] as const
-                  ).map((opt) => (
+                  {(["blur", "pixelate", "blackout"] as const).map((mode) => (
                     <button
-                      key={opt.id}
+                      key={mode}
                       type="button"
-                      onClick={() => setNewRegionMode(opt.id)}
-                      className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                        newRegionMode === opt.id
-                          ? "bg-[#8B5CF6]/20 border-[#8B5CF6] text-white"
-                          : "bg-[#090B14] border-[#1F2937] text-[#8CA3B8] hover:border-[#8B5CF6]/30"
+                      onClick={() => setNewRegionMode(mode)}
+                      className={`p-2 rounded-xl border font-semibold capitalize text-center cursor-pointer transition-all ${
+                        newRegionMode === mode
+                          ? "bg-[#14B8A6]/20 border-[#14B8A6] text-[#14B8A6]"
+                          : "bg-[#090B14] border-[#1F2937] text-[#8CA3B8] hover:text-white"
                       }`}
                     >
-                      <div className="text-xs font-bold capitalize">{opt.label}</div>
-                      <div className="text-[10px] text-[#8CA3B8] mt-0.5">{opt.desc}</div>
+                      {mode}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1F2937]">
+            <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={handleCancelNewRegion}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-[#8CA3B8] hover:bg-[#162032] cursor-pointer"
+                onClick={() => setShowNewRegionModal(false)}
+                className="px-4 py-2 rounded-xl bg-[#090B14] border border-[#1F2937] text-xs font-semibold text-[#8CA3B8] hover:text-white cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmNewRegion}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#14B8A6] hover:bg-[#0D9488] text-white shadow-lg shadow-[#14B8A6]/20 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-xs font-bold text-white shadow-lg shadow-[#8B5CF6]/25 cursor-pointer"
               >
-                Add Protection
+                Apply Protection
               </button>
             </div>
           </div>

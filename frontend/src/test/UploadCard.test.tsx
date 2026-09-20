@@ -8,8 +8,8 @@ describe("UploadCard Component", () => {
     render(<UploadCard onUpload={mockUpload} />);
 
     expect(screen.getByText(/Drop screenshot, document, or PDF here/i)).toBeInTheDocument();
-    expect(screen.getByText(/Browse from Computer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Max 15 MB/i)).toBeInTheDocument();
+    expect(screen.getByText(/Browse from Device/i)).toBeInTheDocument();
+    expect(screen.getByText(/Max 10 MB/i)).toBeInTheDocument();
   });
 
   it("handles valid file selection and shows file info", () => {
@@ -24,7 +24,7 @@ describe("UploadCard Component", () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     expect(screen.getByText("screenshot.png")).toBeInTheDocument();
-    expect(screen.getByText(/Start Cybersecurity Scan/i)).toBeInTheDocument();
+    expect(screen.getByText(/Start Privacy Scan/i)).toBeInTheDocument();
   });
 
   it("calls onUpload when submit button is clicked", () => {
@@ -38,7 +38,7 @@ describe("UploadCard Component", () => {
 
     fireEvent.change(input, { target: { files: [file] } });
 
-    const submitBtn = screen.getByText(/Start Cybersecurity Scan/i);
+    const submitBtn = screen.getByText(/Start Privacy Scan/i);
     fireEvent.click(submitBtn);
 
     expect(mockUpload).toHaveBeenCalledWith(file);

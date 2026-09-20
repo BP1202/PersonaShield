@@ -153,7 +153,7 @@ export const ProcessingPage: React.FC = () => {
         badge: "Completed",
         detail: `Report snapshot compiled with ${chainCount} attack vectors analyzed (${repMs} ms).`,
       });
-      addLog("Metadata stripped • Camera EXIF & GPS purged • SafeShare ready", "accent");
+      addLog("Metadata stripped • Document sanitized • SafeShare ready", "accent");
       addLog("Cyber Safety Receipt compiled and cryptographically verified", "success");
 
       setIsCompleted(true);
