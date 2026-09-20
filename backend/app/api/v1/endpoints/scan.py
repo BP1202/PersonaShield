@@ -10,6 +10,7 @@ from backend.app.schemas.scan import (
     ScanStatusResponseData,
 )
 from backend.app.services.scan_service import scan_service
+from backend.app.services.storage_service import storage_service
 
 router = APIRouter()
 
@@ -74,3 +75,33 @@ async def get_scan_status(
         file=file_data,
     )
     return success_response(data=payload, request_id=request_id)
+
+
+@router.get(
+    "/{scan_id}/preview",
+    summary="Get Scan Artifact Image Preview",
+    description="Streams the original upload artifact for visual verification and bounding box overlay in frontend canvas.",
+)
+async def get_scan_preview(
+    scan_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import FileResponse
+    scan_session = await scan_service.get_scan_session(db=db, scan_id=scan_id)
+    if not scan_session.file:
+        from backend.app.core.exceptions import ResourceNotFoundError
+        raise ResourceNotFoundError(f"File for scan '{scan_id}' not found")
+
+    file_path = (storage_service.upload_dir / scan_session.file.stored_filename).resolve()
+    if not file_path.exists() or not file_path.is_file():
+        from backend.app.core.exceptions import ResourceNotFoundError
+        raise ResourceNotFoundError("Artifact missing on disk")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=scan_session.file.mime_type or "image/png",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )

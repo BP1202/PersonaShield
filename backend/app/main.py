@@ -1,8 +1,17 @@
+import sys
+from pathlib import Path
+
+# Ensure repository root is on sys.path regardless of launch directory
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -49,7 +58,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Register Middlewares (Order of execution: Request ID -> Request Size Limit -> Security Headers -> Structured Logging)
+    # Register Middlewares (Order of execution: Request ID -> Request Size Limit -> Security Headers -> Structured Logging -> CORS)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware)

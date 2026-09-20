@@ -77,7 +77,12 @@ class ScanService:
         Retrieves an existing scan session with file metadata by UUID.
         Raises ResourceNotFoundError if session does not exist.
         """
-        query = select(ScanSession).where(ScanSession.id == scan_id)
+        from sqlalchemy.orm import selectinload
+        query = (
+            select(ScanSession)
+            .where(ScanSession.id == scan_id)
+            .options(selectinload(ScanSession.file))
+        )
         result = await db.execute(query)
         session = result.scalar_one_or_none()
 
